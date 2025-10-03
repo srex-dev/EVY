@@ -602,7 +602,7 @@ EVY is an open-source project building the future of resilient AI communication.
 
 ## 📄 **License**
 
-[To be determined - Open Source]
+MIT License
 
 ---
 
@@ -611,7 +611,7 @@ EVY is an open-source project building the future of resilient AI communication.
 - **GitHub Issues**: [Report bugs and request features](https://github.com/evy-ai/evy/issues)
 - **Documentation**: See individual component guides
 - **Community**: Join the EVY development community
-- **Email**: [Contact information]
+- **Email**: jonathan.kershaw@gmail.com
 
 ---
 
