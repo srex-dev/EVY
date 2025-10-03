@@ -1,0 +1,166 @@
+# lilEVY Deployment Configuration
+# Edge SMS Node - Raspberry Pi 4 + GSM HAT + Solar Power
+version: '3.8'
+
+services:
+  # lilEVY Core Services
+  sms-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-sms-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - GSM_DEVICE=/dev/ttyUSB0
+      - GSM_BAUD_RATE=115200
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy:/data
+      - /dev:/dev:rw  # Access to GSM device
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  message-router:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-message-router
+    ports:
+      - "8001:8001"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - SMS_GATEWAY_URL=http://sms-gateway:8000
+      - LLM_SERVICE_URL=http://tiny-llm:8002
+      - RAG_SERVICE_URL=http://local-rag:8003
+      - PRIVACY_FILTER_URL=http://privacy-filter:8004
+      - LOG_LEVEL=INFO
+    depends_on:
+      - sms-gateway
+      - tiny-llm
+      - local-rag
+      - privacy-filter
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  tiny-llm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-tiny-llm
+    ports:
+      - "8002:8002"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MODEL_TYPE=tiny
+      - DEFAULT_MODEL=tinyllama
+      - MAX_TOKENS=512
+      - RESPONSE_TIME_TARGET=10
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/tiny:/models
+      - ./data/lilevy:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  local-rag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-local-rag
+    ports:
+      - "8003:8003"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - MAX_DOCUMENTS=10000
+      - CACHE_SIZE_MB=500
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy/knowledge:/data/lilevy_knowledge
+      - ./data/lilevy/chroma:/data/chroma
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  privacy-filter:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-privacy-filter
+    ports:
+      - "8004:8004"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MAX_SMS_PER_MINUTE=10
+      - MAX_SMS_PER_HOUR=100
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy/privacy:/data/privacy_filter
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  # lilEVY Communication Services
+  node-communication:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-node-communication
+    ports:
+      - "8005:8005"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - PEER_DISCOVERY=true
+      - MESH_NETWORK=true
+      - SYNC_INTERVAL_HOURS=24
+      - LOG_LEVEL=INFO
+    depends_on:
+      - local-rag
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+  # lilEVY Monitoring
+  monitoring:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-monitoring
+    ports:
+      - "9090:9090"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - METRICS_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy/metrics:/data/metrics
+    restart: unless-stopped
+    networks:
+      - lilevy-network
+
+networks:
+  lilevy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  lilevy-data:
+    driver: local
+  lilevy-models:
+    driver: local

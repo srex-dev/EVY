@@ -1,0 +1,293 @@
+# Enhanced lilEVY Deployment Configuration
+# lilEVY with LoRa Radio Integration - Off-Grid Mesh Network Node
+version: '3.8'
+
+services:
+  # Enhanced lilEVY Core Services
+  enhanced-lilevy:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: enhanced-lilevy-001
+    ports:
+      - "8000:8000"  # API Gateway
+      - "8001:8001"  # Metrics Simulator
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - LORA_ENABLED=true
+      - LORA_FREQUENCY=433.0
+      - LORA_POWER=14
+      - MESH_NETWORK_ENABLED=true
+      - SMART_ROUTING_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy:/data
+      - ./models/tiny:/models
+      - /dev/ttyUSB0:/dev/ttyUSB0  # LoRa HAT serial interface
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0  # LoRa HAT access
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+    depends_on:
+      - redis
+      - chroma
+
+  # SMS Gateway with Enhanced Capabilities
+  sms-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: enhanced-sms-gateway
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - SMS_DEVICE=/dev/ttyUSB1
+      - GSM_ENABLED=true
+      - LORA_INTEGRATION=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/sms:/data
+      - /dev/ttyUSB1:/dev/ttyUSB1  # GSM HAT
+    devices:
+      - /dev/ttyUSB1:/dev/ttyUSB1
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Enhanced Message Router with Smart Routing
+  message-router:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: enhanced-message-router
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - SMART_ROUTING_ENABLED=true
+      - MESH_ROUTING_ENABLED=true
+      - LORA_ROUTING_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/router:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+    depends_on:
+      - redis
+
+  # Tiny LLM Service (Enhanced)
+  tiny-llm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: enhanced-tiny-llm
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MODEL_TYPE=tiny
+      - DEFAULT_MODEL=phi-2
+      - MAX_TOKENS=160
+      - RESPONSE_TIME_TARGET=5
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/tiny:/models
+      - ./data/llm:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Local RAG Service with Mesh Sync
+  local-rag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: enhanced-local-rag
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - MAX_DOCUMENTS=10000
+      - CACHE_SIZE_MB=1000
+      - MESH_SYNC_ENABLED=true
+      - OFFLINE_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/rag:/data
+      - ./data/chroma:/data/chroma
+      - ./data/knowledge:/data/knowledge
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+    depends_on:
+      - chroma
+
+  # Privacy Filter (Enhanced)
+  privacy-filter:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: enhanced-privacy-filter
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MESH_PROCESSING=true
+      - ENCRYPTION_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/privacy:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # LoRa Radio Service
+  lora-radio:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: lora-radio-service
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - LORA_FREQUENCY=433.0
+      - LORA_POWER=14
+      - LORA_BANDWIDTH=125
+      - LORA_SPREADING_FACTOR=7
+      - LORA_CODING_RATE=5
+      - MESH_DISCOVERY_INTERVAL=30
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lora:/data
+      - /dev/ttyUSB0:/dev/ttyUSB0  # LoRa HAT
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Smart Communication Router
+  smart-router:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: smart-router
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - ROUTING_POLICY=adaptive
+      - LAYER_PRIORITY=SMS,LORA,INTERNET
+      - EMERGENCY_ROUTING=SMS,LORA
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/router:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Mesh Network Manager
+  mesh-manager:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: mesh-manager
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MESH_PROTOCOL=evy-mesh
+      - DISCOVERY_INTERVAL=30
+      - ROUTING_UPDATE_INTERVAL=60
+      - NETWORK_HEALING_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/mesh:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Enhanced Monitoring Service
+  monitoring:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: enhanced-monitoring
+    ports:
+      - "9090:9090"  # Prometheus
+      - "3000:3000"  # Grafana
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MESH_METRICS_ENABLED=true
+      - LORA_METRICS_ENABLED=true
+      - ROUTING_METRICS_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/metrics:/data
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Redis for Message Queuing
+  redis:
+    image: redis:7-alpine
+    container_name: enhanced-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # ChromaDB for Vector Storage
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: enhanced-chroma
+    ports:
+      - "8002:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+  # Optional: Web Interface for Enhanced lilEVY
+  web-interface:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.enhanced-lilevy
+    container_name: enhanced-web-interface
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_TYPE=lilevy
+      - API_BASE_URL=http://enhanced-lilevy:8000
+      - MESH_VISUALIZATION=true
+      - LORA_MONITORING=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - enhanced-lilevy
+    restart: unless-stopped
+    networks:
+      - lilevy-mesh-network
+
+networks:
+  lilevy-mesh-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    labels:
+      - "evy.network=mesh"
+      - "evy.node-type=enhanced-lilevy"
+
+volumes:
+  redis-data:
+    driver: local
+  chroma-data:
+    driver: local

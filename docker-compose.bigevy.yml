@@ -1,0 +1,217 @@
+# bigEVY Deployment Configuration
+# Central Processing Node - High-performance server with GPU
+version: '3.8'
+
+services:
+  # bigEVY Core Services
+  model-manager:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-model-manager
+    ports:
+      - "9000:9000"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - GPU_ENABLED=true
+      - MODEL_STORAGE_PATH=/models
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/large:/models
+      - ./data/bigevy:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  large-llm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-large-llm
+    ports:
+      - "9001:9001"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - MODEL_TYPE=large
+      - DEFAULT_MODEL=llama-2-7b
+      - MAX_TOKENS=2048
+      - BATCH_PROCESSING=true
+      - GPU_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/large:/models
+      - ./data/bigevy:/data
+    depends_on:
+      - model-manager
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  global-rag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-global-rag
+    ports:
+      - "9002:9002"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - EMBEDDING_MODEL=all-mpnet-base-v2
+      - MAX_DOCUMENTS=1000000
+      - CACHE_SIZE_MB=10000
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/global_knowledge:/data/bigevy_global_knowledge
+      - ./data/bigevy/chroma:/data/chroma
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  analytics-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-analytics
+    ports:
+      - "9003:9003"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - ANALYTICS_ENABLED=true
+      - DATA_RETENTION_DAYS=365
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/analytics:/data/analytics
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  sync-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-sync-service
+    ports:
+      - "9004:9004"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - SYNC_INTERVAL_HOURS=1
+      - LILEVY_NODES_DISCOVERY=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/sync:/data/sync
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  update-manager:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-update-manager
+    ports:
+      - "9005:9005"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - MODEL_UPDATES_ENABLED=true
+      - UPDATE_CHECK_INTERVAL_HOURS=24
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models:/models
+      - ./data/bigevy/updates:/data/updates
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  load-balancer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-load-balancer
+    ports:
+      - "9006:9006"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - LOAD_BALANCING_ENABLED=true
+      - HEALTH_CHECK_INTERVAL=30
+      - LOG_LEVEL=INFO
+    depends_on:
+      - large-llm
+      - global-rag
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  # bigEVY Monitoring and Management
+  monitoring:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-monitoring
+    ports:
+      - "9091:9091"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - METRICS_ENABLED=true
+      - ALERTING_ENABLED=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/metrics:/data/metrics
+      - ./data/bigevy/alerts:/data/alerts
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+  # Optional: Web Interface for bigEVY Management
+  web-interface:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-web-interface
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_TYPE=bigevy
+      - API_BASE_URL=http://load-balancer:9006
+      - LOG_LEVEL=INFO
+    depends_on:
+      - load-balancer
+    restart: unless-stopped
+    networks:
+      - bigevy-network
+
+networks:
+  bigevy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  bigevy-data:
+    driver: local
+  bigevy-models:
+    driver: local
+  bigevy-analytics:
+    driver: local

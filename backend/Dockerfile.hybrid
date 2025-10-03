@@ -1,0 +1,56 @@
+# Hybrid EVY Dockerfile - Supports both lilEVY and bigEVY services
+FROM python:3.9-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV HYBRID_MODE=true
+
+# Install system dependencies for both lilEVY and bigEVY
+RUN apt-get update && apt-get install -y \
+    gammu \
+    gammu-smsd \
+    python3-gammu \
+    python3-serial \
+    python3-dev \
+    gcc \
+    g++ \
+    git \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional dependencies for hybrid mode
+RUN pip install --no-cache-dir \
+    accelerate \
+    transformers \
+    datasets
+
+# Copy application code
+COPY . .
+
+# Create data directories for both node types
+RUN mkdir -p /data/{lilevy/{knowledge,chroma,privacy,metrics},bigevy/{global_knowledge,chroma,analytics,sync,updates,metrics,alerts},hybrid/metrics}
+RUN mkdir -p /models/{tiny,large}
+
+# Set permissions
+RUN chmod +x /app/start-hybrid.sh
+
+# Expose ports for both lilEVY and bigEVY services
+EXPOSE 8000-8005 8500 9000-9006 9092
+
+# Health check for hybrid services
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8500/health || exit 1
+
+# Default command
+CMD ["python", "-m", "uvicorn", "backend.shared.communication.hybrid_main:app", "--host", "0.0.0.0", "--port", "8500"]

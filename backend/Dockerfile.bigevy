@@ -1,0 +1,61 @@
+# bigEVY Dockerfile - Optimized for high-performance servers with GPU
+FROM nvidia/cuda:11.8-devel-ubuntu20.04
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV NODE_TYPE=bigevy
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.9 \
+    python3.9-pip \
+    python3.9-dev \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symbolic link for python
+RUN ln -s /usr/bin/python3.9 /usr/bin/python
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies with CUDA support
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional bigEVY dependencies
+RUN pip install --no-cache-dir \
+    vllm \
+    accelerate \
+    bitsandbytes \
+    transformers[torch] \
+    datasets
+
+# Copy application code
+COPY . .
+
+# Create data directories
+RUN mkdir -p /data/bigevy/{global_knowledge,chroma,analytics,sync,updates,metrics,alerts}
+RUN mkdir -p /models/large
+
+# Set permissions
+RUN chmod +x /app/start-bigevy.sh
+
+# Expose ports
+EXPOSE 9000-9006
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=30s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:9000/health || exit 1
+
+# Default command
+CMD ["python", "-m", "uvicorn", "backend.bigevy.main:app", "--host", "0.0.0.0", "--port", "9000"]

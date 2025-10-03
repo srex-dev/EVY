@@ -1,0 +1,47 @@
+# lilEVY Dockerfile - Optimized for Raspberry Pi 4 + GSM HAT
+FROM python:3.9-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV NODE_TYPE=lilevy
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gammu \
+    gammu-smsd \
+    python3-gammu \
+    python3-serial \
+    python3-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create data directories
+RUN mkdir -p /data/lilevy/{knowledge,chroma,privacy,metrics}
+RUN mkdir -p /models/tiny
+
+# Set permissions
+RUN chmod +x /app/start-lilevy.sh
+
+# Expose ports
+EXPOSE 8000-8005
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command
+CMD ["python", "-m", "uvicorn", "backend.lilevy.main:app", "--host", "0.0.0.0", "--port", "8000"]

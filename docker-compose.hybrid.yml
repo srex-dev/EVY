@@ -1,0 +1,284 @@
+# EVY Hybrid Deployment Configuration
+# Runs both lilEVY and bigEVY nodes with inter-node communication
+version: '3.8'
+
+services:
+  # lilEVY Node Services
+  lilevy-sms-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-sms-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - GSM_DEVICE=/dev/ttyUSB0
+      - GSM_BAUD_RATE=115200
+      - BIGEVY_NODES=http://bigevy-load-balancer:9006
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy:/data
+      - /dev:/dev:rw
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - lilevy-network
+
+  lilevy-tiny-llm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-tiny-llm
+    ports:
+      - "8002:8002"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - MODEL_TYPE=tiny
+      - DEFAULT_MODEL=tinyllama
+      - BIGEVY_FALLBACK=true
+      - BIGEVY_LLM_URL=http://bigevy-large-llm:9001
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/tiny:/models
+      - ./data/lilevy:/data
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - lilevy-network
+
+  lilevy-local-rag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-local-rag
+    ports:
+      - "8003:8003"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - BIGEVY_RAG_URL=http://bigevy-global-rag:9002
+      - SYNC_TO_BIGEVY=true
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/lilevy/knowledge:/data/lilevy_knowledge
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - lilevy-network
+
+  lilevy-hybrid-orchestrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lilevy
+    container_name: lilevy-hybrid-orchestrator
+    ports:
+      - "8005:8005"
+    environment:
+      - NODE_TYPE=lilevy
+      - NODE_ID=lilevy-001
+      - BIGEVY_NODES=http://bigevy-load-balancer:9006
+      - COMPLEXITY_THRESHOLD=0.7
+      - FALLBACK_ENABLED=true
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - lilevy-tiny-llm
+      - lilevy-local-rag
+      - bigevy-load-balancer
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - lilevy-network
+
+  # bigEVY Node Services
+  bigevy-large-llm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-large-llm
+    ports:
+      - "9001:9001"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - MODEL_TYPE=large
+      - DEFAULT_MODEL=llama-2-7b
+      - GPU_ENABLED=true
+      - LILEVY_SUPPORT=true
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models/large:/models
+      - ./data/bigevy:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - bigevy-network
+
+  bigevy-global-rag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-global-rag
+    ports:
+      - "9002:9002"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - EMBEDDING_MODEL=all-mpnet-base-v2
+      - LILEVY_SYNC=true
+      - LILEVY_RAG_URL=http://lilevy-local-rag:8003
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/global_knowledge:/data/bigevy_global_knowledge
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - bigevy-network
+
+  bigevy-sync-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-sync-service
+    ports:
+      - "9004:9004"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - LILEVY_NODES=http://lilevy-hybrid-orchestrator:8005
+      - SYNC_INTERVAL_HOURS=1
+      - KNOWLEDGE_SYNC=true
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/bigevy/sync:/data/sync
+    depends_on:
+      - lilevy-hybrid-orchestrator
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - bigevy-network
+
+  bigevy-load-balancer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.bigevy
+    container_name: bigevy-load-balancer
+    ports:
+      - "9006:9006"
+    environment:
+      - NODE_TYPE=bigevy
+      - NODE_ID=bigevy-001
+      - LILEVY_ROUTING=true
+      - HYBRID_MODE=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - bigevy-large-llm
+      - bigevy-global-rag
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+      - bigevy-network
+
+  # Hybrid Communication Services
+  hybrid-communication:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.hybrid
+    container_name: hybrid-communication
+    ports:
+      - "8500:8500"
+    environment:
+      - HYBRID_MODE=true
+      - LILEVY_NODES=http://lilevy-hybrid-orchestrator:8005
+      - BIGEVY_NODES=http://bigevy-load-balancer:9006
+      - DISCOVERY_ENABLED=true
+      - MESH_NETWORK=true
+      - LOG_LEVEL=INFO
+    depends_on:
+      - lilevy-hybrid-orchestrator
+      - bigevy-load-balancer
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+
+  # Hybrid Monitoring
+  hybrid-monitoring:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.hybrid
+    container_name: hybrid-monitoring
+    ports:
+      - "9092:9092"
+    environment:
+      - HYBRID_MODE=true
+      - MONITOR_BOTH_NODES=true
+      - METRICS_AGGREGATION=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data/hybrid/metrics:/data/metrics
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+
+  # Hybrid Web Interface
+  hybrid-web-interface:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.hybrid
+    container_name: hybrid-web-interface
+    ports:
+      - "3002:3002"
+    environment:
+      - HYBRID_MODE=true
+      - LILEVY_API_URL=http://lilevy-hybrid-orchestrator:8005
+      - BIGEVY_API_URL=http://bigevy-load-balancer:9006
+      - LOG_LEVEL=INFO
+    depends_on:
+      - hybrid-communication
+    restart: unless-stopped
+    networks:
+      - hybrid-network
+
+networks:
+  hybrid-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+  lilevy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  bigevy-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  hybrid-data:
+    driver: local
+  lilevy-data:
+    driver: local
+  bigevy-data:
+    driver: local

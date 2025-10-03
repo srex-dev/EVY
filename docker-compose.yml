@@ -1,0 +1,195 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: evy-postgres
+    environment:
+      POSTGRES_USER: evy
+      POSTGRES_PASSWORD: evy_password
+      POSTGRES_DB: evy_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: evy-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - api-gateway
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: evy-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+
+  # SMS Gateway Service
+  sms-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-sms-gateway
+    command: python -m backend.services.sms_gateway.main
+    ports:
+      - "8001:8001"
+    environment:
+      - SMS_GATEWAY_PORT=8001
+      - MESSAGE_ROUTER_PORT=8002
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - postgres
+
+  # Message Router Service
+  message-router:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-message-router
+    command: python -m backend.services.message_router.main
+    ports:
+      - "8002:8002"
+    environment:
+      - MESSAGE_ROUTER_PORT=8002
+      - LLM_INFERENCE_PORT=8003
+      - RAG_SERVICE_PORT=8004
+      - SMS_GATEWAY_PORT=8001
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - sms-gateway
+
+  # LLM Inference Service
+  llm-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-llm-inference
+    command: python -m backend.services.llm_inference.main
+    ports:
+      - "8003:8003"
+    environment:
+      - LLM_INFERENCE_PORT=8003
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-gpt-4}
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - postgres
+
+  # RAG Service
+  rag-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-rag-service
+    command: python -m backend.services.rag_service.main
+    ports:
+      - "8004:8004"
+    environment:
+      - RAG_SERVICE_PORT=8004
+      - CHROMA_PERSIST_DIR=/data/chroma
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./backend:/app/backend
+      - chroma_data:/data/chroma
+    depends_on:
+      - postgres
+
+  # Privacy Filter Service
+  privacy-filter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-privacy-filter
+    command: python -m backend.services.privacy_filter.main
+    ports:
+      - "8005:8005"
+    environment:
+      - PRIVACY_FILTER_PORT=8005
+      - MAX_SMS_PER_MINUTE=${MAX_SMS_PER_MINUTE:-10}
+      - MAX_SMS_PER_HOUR=${MAX_SMS_PER_HOUR:-100}
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - postgres
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evy-api-gateway
+    command: python -m backend.api_gateway.main
+    ports:
+      - "8000:8000"
+    environment:
+      - API_GATEWAY_PORT=8000
+      - SMS_GATEWAY_PORT=8001
+      - MESSAGE_ROUTER_PORT=8002
+      - LLM_INFERENCE_PORT=8003
+      - RAG_SERVICE_PORT=8004
+      - PRIVACY_FILTER_PORT=8005
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - sms-gateway
+      - message-router
+      - llm-inference
+      - rag-service
+      - privacy-filter
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: evy-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  chroma_data:
+
+networks:
+  default:
+    name: evy-network
+
+

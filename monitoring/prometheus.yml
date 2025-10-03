@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8000']
+    metrics_path: '/metrics'
+
+  - job_name: 'sms-gateway'
+    static_configs:
+      - targets: ['sms-gateway:8001']
+    metrics_path: '/metrics'
+
+  - job_name: 'message-router'
+    static_configs:
+      - targets: ['message-router:8002']
+    metrics_path: '/metrics'
+
+  - job_name: 'llm-inference'
+    static_configs:
+      - targets: ['llm-inference:8003']
+    metrics_path: '/metrics'
+
+  - job_name: 'rag-service'
+    static_configs:
+      - targets: ['rag-service:8004']
+    metrics_path: '/metrics'
+
+  - job_name: 'privacy-filter'
+    static_configs:
+      - targets: ['privacy-filter:8005']
+    metrics_path: '/metrics'
+
+
