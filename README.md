@@ -66,6 +66,32 @@ Communication Layers:
 
 ---
 
+## 🧩 **Idealized Component Blueprint (Current)**
+
+### **lilEVY Hardware Profile (Edge Node)**
+- **Compute**: Raspberry Pi 4 (4GB/8GB)
+- **Cellular/SMS + GNSS**: SIM7600-series 4G HAT over USB (`/dev/ttyUSB0`, `/dev/ttyUSB1`)
+- **LoRa Mesh**: SX1276 LoRa HAT over SPI (`/dev/spidev0.0`) with configurable CS pin
+- **GPS**: NMEA source from LoRa/GPS HAT UART or SIM7600 GNSS path
+- **Power Telemetry**: battery level path wired for edge power-aware routing
+- **Deployment Defaults**: region-aware LoRa frequency, offline-first service priorities
+
+### **lilEVY Service Topology**
+- **`sms-gateway`**: SMS ingress/egress with direct-send fallback when queue is unavailable
+- **`message-router`**: intent-aware routing, multi-SMS chunking, and operator `!status` command
+- **`tiny-llm`**: local inference with Ollama defaults and BitNet-ready provider switching
+- **`local-rag`**: ChromaDB-backed retrieval with similarity thresholding and hash-based sync
+- **`node-communication`**: LoRa node messaging, discovery, routing, and telemetry plumbing
+- **`monitoring`**: Prometheus metrics collection for edge observability
+
+### **Cross-Cutting Platform Components**
+- **Rust services**: `sms_gateway`, `message_router`, and `compression` crates for critical paths
+- **Emergency response**: template + detector + service flow for high-priority scenarios
+- **Shared integration layer**: service discovery, rust bridge utilities, and local edge database
+- **Validation harnesses**: full software suite and per-device hardware validation scripts
+
+---
+
 ## 🔧 **Hardware Requirements**
 
 ### **🌱 lilEVY Node (Edge)**
@@ -85,7 +111,7 @@ Core Components:
 
   LoRa HAT (Mesh Networking): $25
     - SX1276 LoRa transceiver
-    - 433MHz frequency (configurable)
+    - 915MHz default for US (region-configurable)
     - 14dBm output power
     - 10-15 mile range (line of sight)
 
@@ -175,11 +201,11 @@ Total bigEVY Cost: $4,000-10,000+
 Additional Components for Mesh:
   LoRa HAT: $25
     - SX1276 LoRa transceiver
-    - 433MHz frequency
+    - 915MHz default for US deployments
     - 14dBm output power
 
   LoRa Antenna: $15
-    - 433MHz tuned
+    - Tuned to deployment region (915MHz for US)
     - 3dBi gain
     - Weatherproof design
 
@@ -305,24 +331,24 @@ Cost per User (100 users/node):
 
 ### **Backend Services**
 - **Rust Components** (Critical Path):
-  - SMS Gateway (high-performance, <50ms latency)
-  - Message Router (resource-aware routing)
-  - Compression Engine (edge-optimized, <1s compression)
-  - Mesh Network (LoRa communication)
+  - SMS Gateway (`backend/rust_services/sms_gateway`)
+  - Message Router (`backend/rust_services/message_router`)
+  - Compression Engine (`backend/rust_services/compression`)
 - **Python Components** (Ecosystem):
-  - LLM Service (llama.cpp, 4-bit quantization)
-  - RAG Service (FAISS/ChromaDB)
-  - Emergency Service (pre-loaded templates)
-  - Database (SQLite, edge-optimized)
+  - LLM Inference (Ollama default + BitNet support)
+  - RAG Service (ChromaDB + persistent embedding cache)
+  - SMS Gateway + Message Router API services
+  - LoRa Node Communication + Emergency Response
+  - Edge DB + Shared integration modules
 - **Framework**: Python 3.11, FastAPI, Uvicorn
-- **LLM**: TinyLlama (4-bit quantized, 2GB memory)
-- **Vector DB**: FAISS with ChromaDB indexing
-- **Database**: SQLite (WAL mode, batch writes)
-- **Monitoring**: Prometheus + Grafana (lightweight)
+- **LLM**: TinyLlama + BitNet-capable provider path
+- **Vector DB**: ChromaDB (persistent edge store)
+- **Database**: SQLite (edge-first persistence)
+- **Monitoring**: Prometheus (edge metrics)
 - **Containerization**: Docker + Docker Compose
 
 ### **Mesh Networking**
-- **Radio**: LoRa (433MHz, 14dBm, 125kHz bandwidth)
+- **Radio**: LoRa (region-aware defaults; 915MHz for US deployments)
 - **Protocol**: Custom EVY Mesh Protocol with self-healing
 - **Security**: AES-256 encryption, digital signatures
 - **Routing**: Intelligent multi-hop routing with priority queuing
@@ -453,7 +479,7 @@ OPENAI_API_KEY=your_api_key
 
 # LoRa Mesh Configuration
 LORA_ENABLED=true
-LORA_FREQUENCY=433.0
+LORA_FREQUENCY=915.0
 LORA_POWER=14
 MESH_NETWORK_ENABLED=true
 SMART_ROUTING_ENABLED=true
@@ -626,42 +652,22 @@ lilEVY Node (Raspberry Pi 4, 8GB RAM):
 
 ## 🔮 **Roadmap & Implementation Status**
 
-### **✅ Phase 1: Planning & Design (Complete)**
-- ✅ Strategic focus on community platform with emergency capabilities
-- ✅ Comprehensive gap analysis
-- ✅ Edge-focused architecture design
-- ✅ Rust refactoring strategy
-- ✅ Compression engine integration plan
-- ✅ Complete implementation documentation
+### **✅ Foundation + Edge Hardening (Complete)**
+- ✅ Offline-first defaults and deployment gating are implemented
+- ✅ GSM/LoRa/GPS/power hardware paths are wired in service code
+- ✅ RAG reliability improvements are in place (cache + threshold + hash sync)
+- ✅ BitNet/local-first routing updates are integrated
+- ✅ Verification and operator observability workflows are added
 
-### **✅ Phase 2: Documentation (Complete)**
-- ✅ Master Implementation Plan (9-month roadmap)
-- ✅ Technical Specifications (all components)
-- ✅ Testing Plan (comprehensive strategy)
-- ✅ Deployment Runbook (step-by-step guide)
-- ✅ API Documentation (complete reference)
-- ✅ Development Setup Guide
-- ✅ Implementation Checklist
+### **✅ Validation Assets (Complete)**
+- ✅ Full software validation suite (`scripts/test_software_suite.py`)
+- ✅ Hardware validation checklist + per-device test scripts
+- ✅ Integration and regression test updates for current architecture
 
-### **🚀 Phase 3: Implementation (Ready to Start)**
-- ⏳ Hardware validation (Raspberry Pi 4, GSM/LoRa HATs)
-- ⏳ Rust SMS Gateway implementation
-- ⏳ Rust Message Router implementation
-- ⏳ Rust Compression Engine implementation
-- ⏳ Rust Mesh Network implementation
-- ⏳ Python LLM Service (edge-optimized)
-- ⏳ Python RAG Service (edge-optimized)
-- ⏳ Python Emergency Service
-- ⏳ Service integration (PyO3 bindings)
-- ⏳ Testing and validation
-
-### **🔮 Phase 4: Production Deployment (Future)**
-- [ ] Hardware validation complete
-- [ ] Performance optimization
-- [ ] Security hardening
-- [ ] Emergency response testing
-- [ ] Pilot deployment
-- [ ] Production rollout
+### **📌 Next Execution Focus**
+- [ ] Run hardware suite on target Pi hardware and record baselines
+- [ ] Publish operator runbooks from measured field metrics
+- [ ] Promote release cut after hardware go/no-go signoff
 
 ### **📋 Implementation Timeline**
 
@@ -764,21 +770,16 @@ EVY represents a paradigm shift in communication technology, combining:
 
 ## 🎯 **Implementation Ready**
 
-EVY is **ready for implementation** with comprehensive documentation:
+EVY now includes implementation-ready architecture **and** delivered component paths across edge services, Rust critical-path modules, and validation tooling.
 
-✅ **Complete Implementation Plan** - 9-month roadmap with detailed phases  
-✅ **Technical Specifications** - All components fully specified  
-✅ **Testing Strategy** - Comprehensive test plans  
-✅ **Deployment Guides** - Step-by-step deployment procedures  
-✅ **API Documentation** - Complete API reference  
-✅ **Edge Optimization** - Hardware constraints addressed  
-✅ **Rust + Python** - Hybrid architecture defined  
-✅ **Compression Engine** - Edge-optimized compression integrated  
+✅ **Core edge services integrated**  
+✅ **Rust service crates included**  
+✅ **Local-first routing + BitNet path implemented**  
+✅ **RAG reliability and knowledge sync improvements applied**  
+✅ **Software and hardware validation assets available**
 
-**Ready to start implementation when given the greenlight!**
-
-See **[Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)** to verify readiness.
+See **[Documentation Index](docs/INDEX.md)** for the complete component-by-component reference.
 
 ---
 
-*Last Updated: March 2026 - Implementation Ready*
+*Last Updated: March 2026 - Implementation + Validation Baseline Established*
