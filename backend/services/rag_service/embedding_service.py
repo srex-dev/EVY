@@ -6,6 +6,9 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 import json
 import hashlib
+import os
+
+from backend.shared.config import settings
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -30,8 +33,9 @@ class LocalEmbeddingService:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
         self.model = None
-        self.model_cache_dir = Path("/tmp/evy_models")
-        self.model_cache_dir.mkdir(exist_ok=True)
+        cache_root = os.getenv("EMBEDDING_CACHE_DIR", settings.embedding_cache_dir)
+        self.model_cache_dir = Path(cache_root)
+        self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Embedding cache
         self.embedding_cache = {}

@@ -22,6 +22,7 @@ class DocumentManager:
         # Document storage
         self.documents_file = self.data_dir / "documents.json"
         self.categories_file = self.data_dir / "categories.json"
+        self.index_file = self.data_dir / "document_index.json"
         
         # In-memory storage
         self.documents: Dict[str, Dict[str, Any]] = {}
@@ -148,6 +149,7 @@ class DocumentManager:
                 "category": category,
                 "keywords": keywords,
                 "metadata": metadata or {},
+                "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
                 "word_count": len(text.split()),
@@ -160,6 +162,7 @@ class DocumentManager:
             
             # Save to disk
             self._save_documents()
+            self._save_index()
             self._update_stats()
             
             logger.info(f"Added document: {doc_id} ({category})")
@@ -262,6 +265,7 @@ class DocumentManager:
             if text is not None:
                 doc['text'] = text
                 doc['keywords'] = self._extract_keywords(text)
+                doc['content_hash'] = hashlib.sha256(text.encode("utf-8")).hexdigest()
                 doc['word_count'] = len(text.split())
                 doc['char_count'] = len(text)
             
@@ -291,6 +295,7 @@ class DocumentManager:
             
             # Save changes
             self._save_documents()
+            self._save_index()
             self._update_stats()
             
             logger.info(f"Updated document: {doc_id}")
@@ -323,6 +328,7 @@ class DocumentManager:
             
             # Save changes
             self._save_documents()
+            self._save_index()
             self._update_stats()
             
             logger.info(f"Deleted document: {doc_id}")
@@ -410,6 +416,7 @@ class DocumentManager:
             
             # Save to disk
             self._save_documents()
+            self._save_index()
             self._update_stats()
             
             logger.info(f"Imported {len(documents)} documents from {filepath}")
@@ -446,3 +453,24 @@ class DocumentManager:
         except Exception as e:
             logger.error(f"Failed to cleanup old documents: {e}")
             return 0
+
+    def _save_index(self) -> None:
+        """Persist lightweight ID/hash index for sync operations."""
+        try:
+            index = self.get_document_index()
+            with open(self.index_file, "w", encoding="utf-8") as f:
+                json.dump(index, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save document index: {e}")
+
+    def get_document_index(self) -> Dict[str, str]:
+        """Return map of doc_id -> content hash."""
+        index: Dict[str, str] = {}
+        for doc_id, doc in self.documents.items():
+            text = doc.get("text", "")
+            index[doc_id] = doc.get("content_hash") or hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return index
+
+    async def get_all_documents(self) -> List[Dict[str, Any]]:
+        """Get all known documents."""
+        return list(self.documents.values())

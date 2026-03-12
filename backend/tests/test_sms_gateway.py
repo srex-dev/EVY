@@ -242,6 +242,7 @@ class TestMessageQueue:
     @pytest.mark.asyncio
     async def test_mark_sent(self, message_queue, mock_redis):
         """Test marking message as sent."""
+        mock_redis.zscore.return_value = 1.0
         await message_queue.mark_sent("test_message_id")
         
         mock_redis.zrem.assert_called()
@@ -253,8 +254,15 @@ class TestMessageQueue:
         """Test marking message as failed with retry."""
         mock_message_data = {
             'id': 'test_id',
-            'attempts': '1',
-            'max_attempts': '3'
+            'phone_number': '+1234567890',
+            'content': 'Test message',
+            'priority': 'normal',
+            'status': 'processing',
+            'created_at': '2024-01-01T00:00:00',
+            'next_retry': None,
+            'attempts': 1,
+            'max_attempts': 3,
+            'metadata': {}
         }
         mock_redis.hgetall.return_value = mock_message_data
         
@@ -268,8 +276,15 @@ class TestMessageQueue:
         """Test marking message as permanently failed."""
         mock_message_data = {
             'id': 'test_id',
-            'attempts': '3',
-            'max_attempts': '3'
+            'phone_number': '+1234567890',
+            'content': 'Test message',
+            'priority': 'normal',
+            'status': 'processing',
+            'created_at': '2024-01-01T00:00:00',
+            'next_retry': None,
+            'attempts': 3,
+            'max_attempts': 3,
+            'metadata': {}
         }
         mock_redis.hgetall.return_value = mock_message_data
         
@@ -306,6 +321,9 @@ async def test_end_to_end_sms_flow():
         with patch.object(gateway, 'forward_to_router', AsyncMock()) as mock_router:
             mock_queue.initialize = AsyncMock(return_value=True)
             mock_queue.enqueue_message = AsyncMock(return_value="test_id")
+            mock_queue.set_send_handler = AsyncMock()
+            mock_queue.set_receive_handler = AsyncMock()
+            mock_queue.start_processing = AsyncMock()
             
             # Initialize gateway
             await gateway.initialize()

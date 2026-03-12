@@ -27,7 +27,7 @@ class TestSMSGatewayIntegration:
     async def test_send_sms_endpoint(self, sms_client, sample_sms_message):
         """Test SMS sending endpoint."""
         with patch('backend.services.sms_gateway.main.sms_gateway.send_sms', AsyncMock(return_value=True)):
-            response = sms_client.post("/sms/send", json=sample_sms_message.model_dump())
+            response = sms_client.post("/sms/send", json=sample_sms_message.model_dump(mode='json'))
             
             assert response.status_code == 200
             data = response.json()
@@ -38,7 +38,7 @@ class TestSMSGatewayIntegration:
     async def test_receive_sms_endpoint(self, sms_client, sample_sms_message):
         """Test SMS receiving endpoint."""
         with patch('backend.services.sms_gateway.main.sms_gateway.receive_sms', AsyncMock()):
-            response = sms_client.post("/sms/receive", json=sample_sms_message.model_dump())
+            response = sms_client.post("/sms/receive", json=sample_sms_message.model_dump(mode='json'))
             
             assert response.status_code == 200
             data = response.json()
@@ -74,7 +74,10 @@ class TestSMSGatewayIntegration:
     @pytest.mark.asyncio
     async def test_queue_stats_endpoint(self, sms_client):
         """Test queue statistics endpoint."""
-        response = sms_client.get("/queue/stats")
+        with patch('backend.services.sms_gateway.main.sms_gateway.message_queue.get_queue_stats', AsyncMock(return_value={
+            "pending": 0, "processing": 0, "sent": 0, "failed": 0, "total_messages": 0
+        })):
+            response = sms_client.get("/queue/stats")
         
         assert response.status_code == 200
         data = response.json()
@@ -230,7 +233,7 @@ class TestEndToEndFlow:
                     
                     send_response = await http_client.post(
                         "http://localhost:8001/sms/send",
-                        json=response_sms.model_dump()
+                        json=response_sms.model_dump(mode='json')
                     )
                     
                     assert send_response.status_code == 200
@@ -348,14 +351,15 @@ class TestPerformanceIntegration:
         # Send all messages concurrently
         tasks = []
         for message in messages:
-            with patch('backend.services.sms_gateway.main.sms_gateway.receive_sms', AsyncMock()):
-                task = http_client.post(
-                    "http://localhost:8001/sms/receive",
-                    json=message
-                )
-                tasks.append(task)
-        
-        responses = await asyncio.gather(*tasks)
+            task = http_client.post(
+                "http://localhost:8001/sms/receive",
+                json=message
+            )
+            tasks.append(task)
+
+        # Avoid outbound network attempts during this local integration benchmark.
+        with patch('backend.services.sms_gateway.main.sms_gateway.forward_to_router', AsyncMock()):
+            responses = await asyncio.gather(*tasks)
         total_time = time.time() - start_time
         
         # All should succeed

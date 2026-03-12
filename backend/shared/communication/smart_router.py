@@ -202,26 +202,26 @@ class SmartCommunicationRouter:
         """Setup routing policies for different query types."""
         self.routing_policies = {
             QueryType.LLM_REQUEST: {
-                "preferred_layers": [CommunicationLayer.INTERNET, CommunicationLayer.LORA, CommunicationLayer.SMS],
+                "preferred_layers": [CommunicationLayer.SMS, CommunicationLayer.LORA, CommunicationLayer.INTERNET],
                 "fallback_strategy": "cascade",
                 "timeout": 30,
                 "retry_count": 3,
                 "complexity_routing": {
                     QueryComplexity.SIMPLE: [CommunicationLayer.SMS, CommunicationLayer.LORA],
-                    QueryComplexity.MEDIUM: [CommunicationLayer.LORA, CommunicationLayer.INTERNET],
-                    QueryComplexity.COMPLEX: [CommunicationLayer.INTERNET, CommunicationLayer.LORA],
+                    QueryComplexity.MEDIUM: [CommunicationLayer.SMS, CommunicationLayer.LORA, CommunicationLayer.INTERNET],
+                    QueryComplexity.COMPLEX: [CommunicationLayer.LORA, CommunicationLayer.SMS, CommunicationLayer.INTERNET],
                     QueryComplexity.EMERGENCY: [CommunicationLayer.SMS, CommunicationLayer.LORA]
                 }
             },
             QueryType.RAG_QUERY: {
-                "preferred_layers": [CommunicationLayer.LORA, CommunicationLayer.INTERNET],
+                "preferred_layers": [CommunicationLayer.SMS, CommunicationLayer.LORA, CommunicationLayer.INTERNET],
                 "fallback_strategy": "cascade",
                 "timeout": 15,
                 "retry_count": 2,
                 "complexity_routing": {
-                    QueryComplexity.SIMPLE: [CommunicationLayer.LORA, CommunicationLayer.SMS],
-                    QueryComplexity.MEDIUM: [CommunicationLayer.LORA, CommunicationLayer.INTERNET],
-                    QueryComplexity.COMPLEX: [CommunicationLayer.INTERNET, CommunicationLayer.LORA],
+                    QueryComplexity.SIMPLE: [CommunicationLayer.SMS, CommunicationLayer.LORA],
+                    QueryComplexity.MEDIUM: [CommunicationLayer.LORA, CommunicationLayer.SMS, CommunicationLayer.INTERNET],
+                    QueryComplexity.COMPLEX: [CommunicationLayer.LORA, CommunicationLayer.INTERNET, CommunicationLayer.SMS],
                     QueryComplexity.EMERGENCY: [CommunicationLayer.SMS, CommunicationLayer.LORA]
                 }
             },
@@ -456,8 +456,10 @@ class SmartCommunicationRouter:
             if layer == CommunicationLayer.SMS:
                 score += 0.1  # SMS is good for simple queries
         elif context.complexity == QueryComplexity.COMPLEX:
-            if layer == CommunicationLayer.INTERNET:
-                score += 0.1  # Internet is good for complex queries
+            if layer == CommunicationLayer.LORA:
+                score += 0.1  # Prefer local mesh before internet offload
+            elif layer == CommunicationLayer.INTERNET:
+                score += 0.05
         
         return score
     

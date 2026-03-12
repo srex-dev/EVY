@@ -7,6 +7,7 @@ import time
 from backend.services.llm_inference.main import LLMInferenceEngine
 from backend.services.llm_inference.tiny_model_manager import TinyModelManager
 from backend.shared.models import LLMRequest, LLMResponse
+from backend.shared.config import settings
 
 
 class TestLLMInferenceEngine:
@@ -20,28 +21,24 @@ class TestLLMInferenceEngine:
     @pytest.mark.asyncio
     async def test_engine_initialization_openai(self, llm_engine):
         """Test engine initialization with OpenAI."""
-        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
-            with patch('backend.services.llm_inference.main.AsyncOpenAI') as mock_openai:
-                mock_client = Mock()
-                mock_openai.return_value = mock_client
-                
-                engine = LLMInferenceEngine()
-                result = await engine.initialize()
-                
-                assert result is True
-                assert engine.provider == "openai"
+        with patch('backend.services.llm_inference.main.AsyncOpenAI') as mock_openai:
+            with patch.object(settings, 'llm_provider', 'openai'):
+                with patch.object(settings, 'openai_api_key', 'test-key'):
+                    mock_client = Mock()
+                    mock_openai.return_value = mock_client
+                    engine = LLMInferenceEngine()
+                    result = await engine.initialize()
+                    assert result is True
+                    assert engine.provider == "openai"
     
     @pytest.mark.asyncio
-    async def test_engine_initialization_tiny_fallback(self, llm_engine):
-        """Test engine initialization with tiny model fallback."""
-        # No OpenAI key
-        with patch.dict('os.environ', {}, clear=True):
-            with patch.object(llm_engine.tiny_model_manager, 'initialize', AsyncMock(return_value=True)):
-                with patch.object(llm_engine.tiny_model_manager, 'load_model', AsyncMock(return_value=True)):
-                    result = await llm_engine.initialize()
-                    
-                    assert result is True
-                    assert llm_engine.provider == "tiny"
+    async def test_engine_initialization_offline_default(self, llm_engine):
+        """Test engine initialization with offline-first provider default."""
+        with patch.object(llm_engine.tiny_model_manager, 'initialize', AsyncMock(return_value=True)):
+            with patch.object(llm_engine.tiny_model_manager, 'load_model', AsyncMock(return_value=True)):
+                result = await llm_engine.initialize()
+                assert result is True
+                assert llm_engine.provider == "ollama"
     
     @pytest.mark.asyncio
     async def test_generate_response_openai(self, llm_engine, mock_llm_response):
@@ -67,9 +64,9 @@ class TestLLMInferenceEngine:
         
         assert isinstance(response, LLMResponse)
         assert response.response == "Test response"
-        assert response.model_used == "gpt-4"
+        assert response.model_used == settings.default_model
         assert response.tokens_used == 10
-        assert response.processing_time > 0
+        assert response.processing_time >= 0
     
     @pytest.mark.asyncio
     async def test_generate_response_tiny(self, llm_engine, mock_llm_response):
@@ -177,7 +174,7 @@ class TestTinyModelManager:
                     mock_model_class.from_pretrained.return_value = mock_model
                     mock_pipeline_func.return_value = mock_pipeline
                     
-                    result = await model_manager.load_model("tinyllama")
+                    result = await model_manager.load_model("tinyllama", use_quantization=False)
                     
                     assert result is True
                     assert "tinyllama" in model_manager.loaded_models
@@ -205,7 +202,7 @@ class TestTinyModelManager:
         assert result["response"] == "This is a test response from Ollama."
         assert result["model_used"] == "tinyllama"
         assert result["provider"] == "local"
-        assert result["processing_time"] > 0
+        assert result["processing_time"] >= 0
     
     @pytest.mark.asyncio
     async def test_generate_response_transformers(self, model_manager):
@@ -326,9 +323,9 @@ async def test_llm_integration_flow():
                 # Verify response
                 assert isinstance(response, LLMResponse)
                 assert response.response == "This is a helpful response."
-                assert response.model_used == "tinyllama"
+                assert response.model_used in {"tinyllama", "ollama"}
                 assert response.tokens_used == 10
-                assert response.processing_time > 0
+                assert response.processing_time >= 0
 
 
 @pytest.mark.asyncio

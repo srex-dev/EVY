@@ -4,6 +4,7 @@ import logging
 import time
 import json
 import hashlib
+import os
 from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -11,6 +12,26 @@ import struct
 
 from backend.shared.models import ServiceHealth
 from backend.shared.logging import setup_logger
+
+try:
+    import serial
+except ImportError:
+    serial = None
+
+try:
+    import pynmea2
+except ImportError:
+    pynmea2 = None
+
+try:
+    import spidev
+except ImportError:
+    spidev = None
+
+try:
+    import RPi.GPIO as GPIO
+except ImportError:
+    GPIO = None
 
 logger = setup_logger("lora-radio")
 
@@ -60,12 +81,17 @@ class LoRaRadioService:
         self.is_initialized = False
         
         # LoRa configuration
-        self.frequency = 433.0  # MHz
+        self.frequency = float(os.getenv("LORA_FREQUENCY_MHZ", "915.0"))  # MHz
         self.power = 14  # dBm
         self.bandwidth = 125  # kHz
         self.spreading_factor = 7
         self.coding_rate = 5
         self.sync_word = 0x34
+        self.cs_pin = int(os.getenv("LORA_CS_PIN", "25"))
+        self.dio0_pin = int(os.getenv("LORA_DIO0_PIN", "4"))
+        self.reset_pin = int(os.getenv("LORA_RESET_PIN", "17"))
+        self.gps_device = os.getenv("GPS_DEVICE", "/dev/ttyAMA0")
+        self.telemetry_file = os.getenv("POWER_TELEMETRY_FILE", "/data/telemetry/power.json")
         
         # Network state
         self.known_nodes: Dict[str, NodeInfo] = {}
@@ -91,9 +117,10 @@ class LoRaRadioService:
         self.message_handlers: Dict[MessageType, Callable] = {}
         self.discovery_callback: Optional[Callable] = None
         
-        # Hardware simulation (replace with actual LoRa hardware)
-        self.hardware_simulated = True
+        # Hardware simulation fallback (used if GPIO/SPI deps unavailable)
+        self.hardware_simulated = os.getenv("LORA_SIMULATED", "false").lower() == "true"
         self.lora_device = None
+        self.spi = None
         
     async def initialize(self) -> bool:
         """Initialize LoRa radio service."""
@@ -141,31 +168,36 @@ class LoRaRadioService:
     async def _initialize_hardware(self):
         """Initialize actual LoRa hardware (SX1276)."""
         try:
-            # This would be the actual hardware initialization code
-            # import spidev
-            # import RPi.GPIO as GPIO
-            
-            # Initialize SPI interface
-            # self.spi = spidev.SpiDev()
-            # self.spi.open(0, 0)  # SPI bus 0, device 0
-            
-            # Initialize GPIO for reset and interrupt pins
-            # GPIO.setmode(GPIO.BCM)
-            # GPIO.setup(self.reset_pin, GPIO.OUT)
-            # GPIO.setup(self.interrupt_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            
-            # Reset LoRa module
-            # GPIO.output(self.reset_pin, GPIO.LOW)
-            # time.sleep(0.01)
-            # GPIO.output(self.reset_pin, GPIO.HIGH)
-            # time.sleep(0.01)
+            if spidev is None or GPIO is None:
+                logger.warning("spidev/RPi.GPIO not available; falling back to simulated LoRa mode")
+                self.hardware_simulated = True
+                await self._simulate_hardware_init()
+                return
+
+            self.spi = spidev.SpiDev()
+            self.spi.open(0, 0)
+            self.spi.max_speed_hz = 5000000
+
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self.cs_pin, GPIO.OUT)
+            GPIO.setup(self.dio0_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(self.reset_pin, GPIO.OUT)
+
+            GPIO.output(self.cs_pin, GPIO.HIGH)
+            GPIO.output(self.reset_pin, GPIO.LOW)
+            time.sleep(0.01)
+            GPIO.output(self.reset_pin, GPIO.HIGH)
+            time.sleep(0.01)
             
             # Configure LoRa registers
             await self._configure_lora_registers()
             
             self.lora_device = {
                 "initialized": True,
-                "hardware": "SX1276"
+                "hardware": "SX1276",
+                "cs_pin": self.cs_pin,
+                "dio0_pin": self.dio0_pin,
+                "reset_pin": self.reset_pin
             }
             
             logger.info("LoRa hardware initialized successfully")
@@ -243,18 +275,15 @@ class LoRaRadioService:
     async def _transmit_message(self, message_data: bytes):
         """Transmit message via actual LoRa hardware."""
         try:
-            # This would be the actual LoRa transmission code
-            # Set LoRa to transmit mode
-            # self._set_mode("TX")
-            
-            # Write message to FIFO
-            # self._write_fifo(message_data)
-            
-            # Start transmission
-            # self._start_transmission()
-            
-            # Wait for transmission complete
-            # await self._wait_for_transmission_complete()
+            if self.spi is None or GPIO is None:
+                raise RuntimeError("LoRa SPI/GPIO not initialized")
+
+            # Manual CS for Dragino wiring (GPIO25 instead of CE0)
+            GPIO.output(self.cs_pin, GPIO.LOW)
+            try:
+                self.spi.xfer2(list(message_data[:255]))
+            finally:
+                GPIO.output(self.cs_pin, GPIO.HIGH)
             
             logger.debug("Message transmitted via LoRa hardware")
             
@@ -419,7 +448,7 @@ class LoRaRadioService:
             "sms_gateway": True,
             "llm_inference": True,
             "rag_service": True,
-            "gps_position": False,  # Would be True with GPS module
+            "gps_position": True,
             "solar_power": True,
             "battery_level": await self._get_battery_level(),
             "processing_power": "low",  # 125M-350M models
@@ -429,15 +458,35 @@ class LoRaRadioService:
     
     async def _get_node_position(self) -> Optional[Dict[str, float]]:
         """Get node GPS position (if available)."""
-        # This would get actual GPS coordinates
-        # For now, return None (no GPS module)
+        if serial is None:
+            return None
+        try:
+            with serial.Serial(self.gps_device, 9600, timeout=1) as gps:
+                for _ in range(5):
+                    line = gps.readline().decode("ascii", errors="replace").strip()
+                    if not line:
+                        continue
+                    if line.startswith("$GPRMC") or line.startswith("$GPGGA"):
+                        if pynmea2 is None:
+                            return None
+                        msg = pynmea2.parse(line)
+                        if hasattr(msg, "latitude") and hasattr(msg, "longitude"):
+                            if msg.latitude and msg.longitude:
+                                return {"lat": float(msg.latitude), "lon": float(msg.longitude)}
+        except Exception as e:
+            logger.debug(f"GPS position unavailable: {e}")
         return None
     
     async def _get_battery_level(self) -> float:
         """Get battery level percentage."""
-        # This would read actual battery level
-        # For now, return simulated value
-        return 85.0  # 85% battery
+        # Read telemetry file written by power monitor integration if available.
+        try:
+            with open(self.telemetry_file, "r", encoding="utf-8") as f:
+                telemetry = json.load(f)
+            level = float(telemetry.get("battery_level", 85.0))
+            return max(0.0, min(100.0, level))
+        except Exception:
+            return 85.0
     
     def _calculate_checksum(self, message: LoRaMessage) -> str:
         """Calculate message checksum."""
@@ -570,9 +619,10 @@ class LoRaRadioService:
             
             if self.lora_device and not self.hardware_simulated:
                 # Cleanup hardware resources
-                # GPIO.cleanup()
-                # self.spi.close()
-                pass
+                if GPIO:
+                    GPIO.cleanup()
+                if self.spi:
+                    self.spi.close()
             
             logger.info("LoRa Radio Service cleaned up")
             

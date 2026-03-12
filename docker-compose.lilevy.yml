@@ -17,12 +17,20 @@ services:
       - GSM_DEVICE=/dev/ttyUSB0
       - GSM_BAUD_RATE=115200
       - LOG_LEVEL=INFO
+      - LLM_PROVIDER=ollama
+      - DEFAULT_MODEL=tinyllama
     volumes:
       - ./data/lilevy:/data
-      - /dev:/dev:rw  # Access to GSM device
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - lilevy-network
 
@@ -41,12 +49,24 @@ services:
       - RAG_SERVICE_URL=http://local-rag:8003
       - PRIVACY_FILTER_URL=http://privacy-filter:8004
       - LOG_LEVEL=INFO
+      - LLM_PROVIDER=ollama
+      - DEFAULT_MODEL=tinyllama
     depends_on:
-      - sms-gateway
-      - tiny-llm
-      - local-rag
-      - privacy-filter
+      sms-gateway:
+        condition: service_healthy
+      tiny-llm:
+        condition: service_healthy
+      local-rag:
+        condition: service_healthy
+      privacy-filter:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     networks:
       - lilevy-network
 
@@ -62,13 +82,21 @@ services:
       - NODE_ID=lilevy-001
       - MODEL_TYPE=tiny
       - DEFAULT_MODEL=tinyllama
+      - BITNET_MODEL=bitnet-2b
       - MAX_TOKENS=512
       - RESPONSE_TIME_TARGET=10
       - LOG_LEVEL=INFO
+      - LLM_PROVIDER=ollama
     volumes:
       - ./models/tiny:/models
       - ./data/lilevy:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - lilevy-network
 
@@ -86,10 +114,19 @@ services:
       - MAX_DOCUMENTS=10000
       - CACHE_SIZE_MB=500
       - LOG_LEVEL=INFO
+      - EMBEDDING_CACHE_DIR=/data/models/embedding_cache
+      - RAG_MIN_SIMILARITY=0.5
     volumes:
       - ./data/lilevy/knowledge:/data/lilevy_knowledge
       - ./data/lilevy/chroma:/data/chroma
+      - ./data/lilevy/models:/data/models
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - lilevy-network
 
@@ -109,6 +146,12 @@ services:
     volumes:
       - ./data/lilevy/privacy:/data/privacy_filter
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - lilevy-network
 
@@ -126,10 +169,30 @@ services:
       - PEER_DISCOVERY=true
       - MESH_NETWORK=true
       - SYNC_INTERVAL_HOURS=24
+      - LORA_FREQUENCY_MHZ=915.0
+      - LORA_CS_PIN=25
+      - LORA_DIO0_PIN=4
+      - LORA_RESET_PIN=17
+      - DEPLOYMENT_REGION=us
+      - GPS_DEVICE=/dev/ttyAMA0
       - LOG_LEVEL=INFO
     depends_on:
-      - local-rag
+      local-rag:
+        condition: service_healthy
+    devices:
+      - /dev/spidev0.0:/dev/spidev0.0
+      - /dev/ttyAMA0:/dev/ttyAMA0
+    volumes:
+      - /sys/class/gpio:/sys/class/gpio
+      - ./data/lilevy/telemetry:/data/telemetry
+    privileged: true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; print('ok')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - lilevy-network
 

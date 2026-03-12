@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 import httpx
 from typing import Optional, Dict, Any
 import re
+import os
+import json
 import asyncio
 from datetime import datetime
 
@@ -170,8 +172,15 @@ class MessageRouter:
                     rag_result = response.json()
                     # Combine documents into context
                     documents = rag_result.get("documents", [])
+                    scores = rag_result.get("scores", [])
                     if documents:
-                        return " ".join(documents[:2])  # Use top 2 results
+                        filtered = []
+                        for idx, doc in enumerate(documents):
+                            score = scores[idx] if idx < len(scores) else 0.0
+                            if score >= settings.rag_min_similarity:
+                                filtered.append(doc)
+                        if filtered:
+                            return " ".join(filtered[:2])  # Use top 2 high-confidence results
                 return None
         except Exception as e:
             logger.error(f"Error calling RAG service: {e}")
@@ -180,26 +189,45 @@ class MessageRouter:
     async def send_response(self, original_message: SMSMessage, response_text: str) -> None:
         """Send response back via SMS gateway."""
         try:
-            # Truncate to SMS limit
-            if len(response_text) > 160:
-                response_text = response_text[:157] + "..."
-            
-            response_message = SMSMessage(
-                sender=original_message.receiver,  # System number
-                receiver=original_message.sender,  # Original sender
-                content=response_text
-            )
-            
+            chunks = self._chunk_sms_response(response_text)
             async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{self.sms_gateway_url}/sms/send",
-                    json=response_message.model_dump(mode='json'),
-                    timeout=10.0
-                )
+                for chunk in chunks:
+                    response_message = SMSMessage(
+                        sender=original_message.receiver,  # System number
+                        receiver=original_message.sender,  # Original sender
+                        content=chunk
+                    )
+                    await client.post(
+                        f"{self.sms_gateway_url}/sms/send",
+                        json=response_message.model_dump(mode='json'),
+                        timeout=10.0
+                    )
                 
             logger.info(f"Response sent to {response_message.receiver}")
         except Exception as e:
             logger.error(f"Error sending response: {e}")
+
+    def _chunk_sms_response(self, response_text: str) -> list[str]:
+        """Split long responses into numbered SMS chunks."""
+        if len(response_text) <= 160:
+            return [response_text]
+
+        chunks: list[str] = []
+        remaining = response_text.strip()
+        while remaining:
+            if len(remaining) <= 148:
+                chunks.append(remaining)
+                break
+            split_at = remaining.rfind(" ", 0, 148)
+            if split_at <= 0:
+                split_at = 148
+            chunks.append(remaining[:split_at].strip())
+            remaining = remaining[split_at:].strip()
+
+        total = len(chunks)
+        if total == 1:
+            return chunks
+        return [f"[{idx}/{total}] {chunk}"[:160] for idx, chunk in enumerate(chunks, start=1)]
     
     async def process_message(self, message: SMSMessage) -> dict:
         """Main message processing pipeline."""
@@ -299,8 +327,18 @@ class MessageRouter:
         # Parse command
         if command.startswith("/help"):
             return "Available commands: /help, /status, /weather, /news. More coming soon!"
-        elif command.startswith("/status"):
-            return f"System status: Healthy. Processed {self.stats['total_messages']} messages today."
+        elif command.startswith("/status") or command.startswith("!status"):
+            battery = "n/a"
+            telemetry_path = os.getenv("POWER_TELEMETRY_FILE", "/data/telemetry/power.json")
+            try:
+                with open(telemetry_path, "r", encoding="utf-8") as f:
+                    battery = f"{int(float(json.load(f).get('battery_level', 0)))}%"
+            except Exception:
+                pass
+            return (
+                f"Status OK | msgs:{self.stats['total_messages']} | "
+                f"rag:{self.stats['rag_queries']} | battery:{battery}"
+            )[:160]
         elif command.startswith("/weather"):
             return "Weather service not yet available. Try asking 'What's the weather?' instead."
         elif command.startswith("/news"):

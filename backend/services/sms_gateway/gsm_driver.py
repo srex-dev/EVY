@@ -1,11 +1,19 @@
 """GSM HAT driver for SMS communication."""
 import asyncio
-import serial
 import re
 import logging
+import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-import gammu
+try:
+    import serial
+except ImportError:
+    serial = None
+
+try:
+    import gammu
+except ImportError:
+    gammu = None
 from backend.shared.config import settings
 
 logger = logging.getLogger(__name__)
@@ -24,49 +32,27 @@ class GSMDriver:
     async def initialize(self) -> bool:
         """Initialize GSM connection."""
         try:
+            if gammu is None:
+                logger.warning("Gammu not installed; skipping Gammu driver initialization")
+                return False
             # Configure Gammu state machine
             self.state_machine = gammu.StateMachine()
-            
-            # Try different device configurations
-            configs = [
-                {
-                    'Device': settings.sms_device,
-                    'Connection': 'serial',
-                    'BaudRate': settings.sms_baud_rate,
-                    'DataBits': 8,
-                    'StopBits': 1,
-                    'Parity': 'None',
-                    'FlowControl': 'None'
-                },
-                {
-                    'Device': '/dev/ttyACM0',  # Alternative device path
-                    'Connection': 'serial',
-                    'BaudRate': 115200,
-                    'DataBits': 8,
-                    'StopBits': 1,
-                    'Parity': 'None',
-                    'FlowControl': 'None'
-                }
-            ]
-            
-            for config in configs:
+
+            gammurc_path = os.getenv("GAMMU_CONFIG", "/etc/gammurc")
+            if os.path.exists(gammurc_path):
                 try:
-                    self.state_machine.ReadConfig(config)
-                    await asyncio.sleep(1)  # Wait for connection
-                    
-                    # Test connection
+                    # Gammu expects a config filename, not a raw dict.
+                    self.state_machine.ReadConfig(Filename=gammurc_path)
+                    await asyncio.sleep(1)
                     self.state_machine.Init()
                     self.is_connected = True
-                    
-                    # Get device info
                     await self._get_device_info()
-                    
-                    logger.info(f"GSM connection established on {config['Device']}")
+                    logger.info(f"GSM connection established using {gammurc_path}")
                     return True
-                    
                 except Exception as e:
-                    logger.warning(f"Failed to connect on {config['Device']}: {e}")
-                    continue
+                    logger.warning(f"Failed to initialize Gammu using {gammurc_path}: {e}")
+            else:
+                logger.warning(f"GAMMU config file not found at {gammurc_path}")
             
             logger.error("Failed to establish GSM connection on any device")
             return False
@@ -269,6 +255,9 @@ class SerialGSMDriver:
     async def initialize(self) -> bool:
         """Initialize serial connection to GSM module."""
         try:
+            if serial is None:
+                logger.warning("pyserial not installed; serial GSM disabled")
+                return False
             # Try different serial configurations
             configs = [
                 {'port': settings.sms_device, 'baudrate': settings.sms_baud_rate},

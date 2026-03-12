@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import time
+import tempfile
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import torch
@@ -22,8 +23,12 @@ class TinyModelManager:
     """Manages tiny LLM models for local inference."""
     
     def __init__(self):
-        self.model_cache_dir = Path("/tmp/evy_models")
-        self.model_cache_dir.mkdir(exist_ok=True)
+        cache_root = os.getenv("EVY_MODEL_CACHE_DIR")
+        if cache_root:
+            self.model_cache_dir = Path(cache_root)
+        else:
+            self.model_cache_dir = Path(tempfile.gettempdir()) / "evy_models"
+        self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         
         self.loaded_models: Dict[str, Any] = {}
         self.ollama_client = None
@@ -47,6 +52,12 @@ class TinyModelManager:
                 "size": "82M",
                 "memory_requirement": "300MB",
                 "quantized": False
+            },
+            "bitnet-2b": {
+                "model_id": "bitnet-b1.58-2b-4t",
+                "size": "2B",
+                "memory_requirement": "1200MB",
+                "quantized": True
             }
         }
         
@@ -82,7 +93,10 @@ class TinyModelManager:
             if self.ollama_client:
                 # Check Ollama models
                 models = await self.ollama_client.list()
-                ollama_models = [model['name'] for model in models.get('models', [])]
+                ollama_models = [
+                    model.get("name") or model.get("model", "")
+                    for model in models.get("models", [])
+                ]
                 logger.info(f"Available Ollama models: {ollama_models}")
                 
                 # Pull tiny models if not available
@@ -107,7 +121,8 @@ class TinyModelManager:
         tiny_ollama_models = {
             "tinyllama": "tinyllama:latest",
             "phi": "phi:latest",
-            "gemma": "gemma:2b"
+            "gemma": "gemma:2b",
+            "bitnet-2b": "bitnet-2b:latest"
         }
         
         for model_name, ollama_name in tiny_ollama_models.items():
@@ -136,7 +151,7 @@ class TinyModelManager:
             logger.info(f"Loading tiny model: {model_name}")
             
             # Try Ollama first if available
-            if self.ollama_client and model_name in ["tinyllama", "phi", "gemma"]:
+            if self.ollama_client and model_name in ["tinyllama", "phi", "gemma", "bitnet-2b"]:
                 if await self._load_ollama_model(model_name):
                     return True
             
@@ -157,7 +172,8 @@ class TinyModelManager:
             model_map = {
                 "tinyllama": "tinyllama:latest",
                 "phi": "phi:latest", 
-                "gemma": "gemma:2b"
+                "gemma": "gemma:2b",
+                "bitnet-2b": "bitnet-2b:latest"
             }
             
             ollama_name = model_map.get(model_name)
@@ -195,12 +211,16 @@ class TinyModelManager:
             # Configure quantization if requested
             quantization_config = None
             if use_quantization and config.get("quantized", False):
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_use_double_quant=True
-                )
+                try:
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.float16,
+                        bnb_4bit_use_double_quant=True
+                    )
+                except Exception as e:
+                    logger.warning(f"Quantization unavailable, loading without 4-bit config: {e}")
+                    quantization_config = None
             
             # Load tokenizer
             tokenizer = AutoTokenizer.from_pretrained(
@@ -356,7 +376,10 @@ class TinyModelManager:
             
             # Extract response text
             generated_text = result[0]["generated_text"]
-            response_text = generated_text[len(prompt):].strip()
+            if generated_text.startswith(prompt):
+                response_text = generated_text[len(prompt):].strip()
+            else:
+                response_text = generated_text.strip()
             
             # Clean up response
             response_text = self._clean_response(response_text)
@@ -386,6 +409,10 @@ class TinyModelManager:
     
     def _clean_response(self, response: str) -> str:
         """Clean up generated response."""
+        # Prefer assistant turn if a dialogue transcript is present.
+        if "EVY:" in response:
+            response = response.split("EVY:", 1)[1]
+
         # Remove extra whitespace
         response = " ".join(response.split())
         
@@ -393,7 +420,7 @@ class TinyModelManager:
         artifacts = ["User:", "Human:", "Assistant:", "EVY:", "\n\n"]
         for artifact in artifacts:
             response = response.replace(artifact, "")
-        
+
         # Remove trailing punctuation if response is too long
         if len(response) > 150:
             response = response.rstrip(".,!?;")

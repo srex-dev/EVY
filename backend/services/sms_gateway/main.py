@@ -27,13 +27,14 @@ class SMSGateway:
         self.received_messages: List[SMSMessage] = []
         self.message_router_url = f"http://localhost:{settings.message_router_port}"
         
-        # GSM Driver (try Gammu first, fallback to Serial)
+        # GSM Driver (prefer direct serial AT on SIM7600-class modules)
         self.gsm_driver = GSMDriver()
         self.serial_driver = SerialGSMDriver()
         self.active_driver = None
         
         # Message Queue
         self.message_queue = SMSMessageQueue()
+        self.queue_enabled = True
         
         # Message Parser
         self.message_parser = MessageParser()
@@ -54,28 +55,30 @@ class SMSGateway:
         try:
             logger.info("Initializing SMS Gateway...")
             
-            # Initialize message queue
+            # Initialize message queue (optional in edge deployments)
             if not await self.message_queue.initialize():
-                logger.error("Failed to initialize message queue")
-                return False
+                logger.warning("Redis queue unavailable, using direct-send fallback")
+                self.queue_enabled = False
             
-            # Try to initialize GSM driver
-            if await self.gsm_driver.initialize():
-                self.active_driver = self.gsm_driver
-                logger.info("Using Gammu GSM driver")
-            elif await self.serial_driver.initialize():
+            # Try to initialize GSM driver (serial first for SIM7600 reliability)
+            if await self.serial_driver.initialize():
                 self.active_driver = self.serial_driver
                 logger.info("Using Serial GSM driver")
+            elif await self.gsm_driver.initialize():
+                self.active_driver = self.gsm_driver
+                logger.info("Using Gammu GSM driver")
             else:
                 logger.warning("No GSM driver available, running in simulation mode")
                 self.active_driver = None
             
             # Set up message queue handlers
-            await self.message_queue.set_send_handler(self._send_message_handler)
-            await self.message_queue.set_receive_handler(self._receive_message_handler)
+            if self.queue_enabled:
+                await self.message_queue.set_send_handler(self._send_message_handler)
+                await self.message_queue.set_receive_handler(self._receive_message_handler)
             
             # Start background tasks
-            self.queue_task = asyncio.create_task(self.message_queue.start_processing())
+            if self.queue_enabled:
+                self.queue_task = asyncio.create_task(self.message_queue.start_processing())
             if self.active_driver:
                 self.receive_task = asyncio.create_task(self._sms_receive_loop())
             
@@ -97,16 +100,19 @@ class SMSGateway:
                 logger.warning(f"Rate limit exceeded for {message.receiver}")
                 return False
             
-            # Add to queue
-            message_id = await self.message_queue.enqueue_message(
-                phone_number=message.receiver,
-                content=message.content,
-                priority=queue_priority,
-                metadata={'sender': message.sender, 'original_message': message.model_dump()}
-            )
-            
-            logger.info(f"SMS queued for sending: {message_id}")
-            return True
+            if self.queue_enabled:
+                # Add to queue
+                message_id = await self.message_queue.enqueue_message(
+                    phone_number=message.receiver,
+                    content=message.content,
+                    priority=queue_priority,
+                    metadata={'sender': message.sender, 'original_message': message.model_dump()}
+                )
+                logger.info(f"SMS queued for sending: {message_id}")
+                return True
+
+            # Redis-free fallback path
+            return await self._send_message_handler(message.receiver, message.content)
             
         except Exception as e:
             logger.error(f"Failed to queue SMS: {e}")
@@ -277,7 +283,8 @@ class SMSGateway:
                 await self.serial_driver.disconnect()
             
             # Close message queue
-            await self.message_queue.close()
+            if self.queue_enabled:
+                await self.message_queue.close()
             
             logger.info("SMS Gateway shutdown complete")
             
@@ -332,7 +339,11 @@ async def health_check():
     if sms_gateway.active_driver:
         gsm_status = "connected"
     
-    queue_stats = await sms_gateway.message_queue.get_queue_stats()
+    queue_stats = (
+        await sms_gateway.message_queue.get_queue_stats()
+        if sms_gateway.queue_enabled
+        else {"mode": "direct-send", "pending": 0, "processing": 0, "sent": 0, "failed": 0}
+    )
     
     return ServiceHealth(
         service_name="sms-gateway",
@@ -342,6 +353,7 @@ async def health_check():
             "sent_messages": len(sms_gateway.sent_messages),
             "received_messages": len(sms_gateway.received_messages),
             "gsm_status": gsm_status,
+            "queue_enabled": sms_gateway.queue_enabled,
             "queue_stats": queue_stats
         }
     )

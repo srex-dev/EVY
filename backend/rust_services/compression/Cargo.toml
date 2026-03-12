@@ -1,0 +1,53 @@
+[package]
+name = "evy-compression"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "evy_compression"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Regex for pattern matching
+regex = "1.10"
+once_cell = "1.19"
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# LRU cache
+lru = "0.12"
+
+# String operations
+unicode-segmentation = "1.11"
+
+# PyO3 for Python bindings
+pyo3 = { version = "0.20", features = ["auto-initialize", "extension-module"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
+

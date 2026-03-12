@@ -16,6 +16,8 @@ fi
 echo "📁 Creating directories..."
 mkdir -p data/lilevy/{knowledge,chroma,privacy,metrics}
 mkdir -p models/tiny
+mkdir -p data/lilevy/models/embedding_cache
+mkdir -p data/lilevy/telemetry
 mkdir -p logs
 
 # Set permissions for GSM device access
@@ -23,6 +25,12 @@ if [ -e /dev/ttyUSB0 ]; then
     echo "📱 Configuring GSM device permissions..."
     sudo chmod 666 /dev/ttyUSB0
     sudo usermod -a -G dialout $USER
+fi
+if [ -e /dev/ttyUSB1 ]; then
+    sudo chmod 666 /dev/ttyUSB1 || true
+fi
+if [ -e /dev/spidev0.0 ]; then
+    sudo chmod 666 /dev/spidev0.0 || true
 fi
 
 # Create environment file
@@ -37,11 +45,15 @@ LOG_LEVEL=INFO
 
 # Model Configuration
 DEFAULT_MODEL=tinyllama
+BITNET_MODEL=bitnet-2b
+LLM_PROVIDER=ollama
 MAX_TOKENS=512
 RESPONSE_TIME_TARGET=10
 
 # RAG Configuration
 EMBEDDING_MODEL=all-MiniLM-L6-v2
+EMBEDDING_CACHE_DIR=/data/models/embedding_cache
+RAG_MIN_SIMILARITY=0.5
 MAX_DOCUMENTS=10000
 CACHE_SIZE_MB=500
 
@@ -53,11 +65,27 @@ MAX_SMS_PER_HOUR=100
 PEER_DISCOVERY=true
 MESH_NETWORK=true
 SYNC_INTERVAL_HOURS=24
+LORA_FREQUENCY_MHZ=915.0
+LORA_CS_PIN=25
+LORA_DIO0_PIN=4
+LORA_RESET_PIN=17
+DEPLOYMENT_REGION=us
 EOF
+
+echo "🧰 Applying Raspberry Pi runtime prerequisites..."
+if command -v raspi-config >/dev/null 2>&1; then
+    sudo raspi-config nonint do_spi 0 || true
+fi
 
 # Pull or build images
 echo "🐳 Building lilEVY Docker images..."
 docker-compose -f docker-compose.lilevy.yml -f docker-compose.override.yml build
+
+# Optional: ensure local model is available in Ollama if installed
+if command -v ollama >/dev/null 2>&1; then
+    echo "🧠 Ensuring local tiny model is available..."
+    ollama pull "${DEFAULT_MODEL}" || true
+fi
 
 # Start services
 echo "🔄 Starting lilEVY services..."
@@ -69,11 +97,20 @@ sleep 30
 
 # Health check
 echo "🏥 Performing health checks..."
-for service in sms-gateway message-router tiny-llm local-rag privacy-filter; do
-    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-        echo "✅ $service is healthy"
+declare -A SERVICE_PORTS=(
+    ["sms-gateway"]=8000
+    ["message-router"]=8001
+    ["tiny-llm"]=8002
+    ["local-rag"]=8003
+    ["privacy-filter"]=8004
+)
+
+for service in "${!SERVICE_PORTS[@]}"; do
+    port="${SERVICE_PORTS[$service]}"
+    if curl -f "http://localhost:${port}/health" > /dev/null 2>&1; then
+        echo "✅ $service is healthy on ${port}"
     else
-        echo "❌ $service health check failed"
+        echo "❌ $service health check failed on ${port}"
     fi
 done
 

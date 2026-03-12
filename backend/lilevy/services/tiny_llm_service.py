@@ -165,10 +165,10 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
     
     def _is_model_suitable_for_lilevy(self, model_name: str) -> bool:
         """Check if model is suitable for lilEVY deployment."""
-        # lilEVY should only use tiny models (125M-350M parameters)
+        # lilEVY supports tiny models and edge-optimized BitNet 2B.
         suitable_models = [
             "tinyllama", "distilgpt2", "phi-2-mini", "gemma-2b", 
-            "qwen1.5-0.5b", "starcoder2-3b", "codegemma-2b"
+            "qwen1.5-0.5b", "starcoder2-3b", "codegemma-2b", "bitnet-2b"
         ]
         return model_name.lower() in suitable_models
     

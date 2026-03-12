@@ -1,0 +1,5 @@
+[gammu]
+port = /dev/ttyUSB0
+connection = at115200
+synchronizetime = yes
+logformat = textall

@@ -1,5 +1,5 @@
 """LLM Inference Service - Handles AI model inference."""
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
@@ -25,10 +25,13 @@ class LLMInferenceEngine:
         if self.provider == "openai":
             if not settings.openai_api_key:
                 logger.warning("OpenAI API key not set, falling back to tiny models")
-                self.provider = "tiny"
+                self.provider = "ollama"
             else:
                 self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
                 logger.info("OpenAI client initialized")
+        elif self.provider == "bitnet":
+            # Route bitnet provider through local manager/ollama.
+            self.provider = "bitnet"
         
         # SMS-specific system prompt
         self.system_prompt = """You are EVY, an AI assistant accessible via SMS. 
@@ -47,7 +50,9 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
             
             # Load default tiny model if using tiny provider
             if self.provider == "tiny":
-                await self.tiny_model_manager.load_model("tinyllama")
+                await self.tiny_model_manager.load_model(settings.tiny_model)
+            elif self.provider == "bitnet":
+                await self.tiny_model_manager.load_model(settings.bitnet_model)
             
             logger.info(f"LLM Inference Engine initialized with provider: {self.provider}")
             return True
@@ -65,6 +70,8 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
                 return await self._generate_openai(request, start_time)
             elif self.provider == "tiny":
                 return await self._generate_tiny(request, start_time)
+            elif self.provider == "bitnet":
+                return await self._generate_bitnet(request, start_time)
             elif self.provider == "ollama":
                 return await self._generate_ollama(request, start_time)
             else:
@@ -164,7 +171,7 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
             # Use tiny model manager's Ollama integration
             result = await self.tiny_model_manager.generate_response(
                 prompt=request.prompt,
-                model_name="tinyllama",  # Default Ollama model
+                model_name=request.model or settings.default_model,
                 max_length=request.max_length,
                 temperature=request.temperature,
                 context=request.context
@@ -187,6 +194,27 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
                 tokens_used=0,
                 processing_time=time.time() - start_time
             )
+
+    async def _generate_bitnet(self, request: LLMRequest, start_time: float) -> LLMResponse:
+        """Generate response using BitNet local model backend."""
+        try:
+            result = await self.tiny_model_manager.generate_response(
+                prompt=request.prompt,
+                model_name=request.model or settings.bitnet_model,
+                max_length=request.max_length,
+                temperature=request.temperature,
+                context=request.context
+            )
+            return LLMResponse(
+                response=result["response"],
+                model_used=result["model_used"],
+                tokens_used=result["tokens_used"],
+                processing_time=time.time() - start_time,
+                metadata={"provider": "bitnet"}
+            )
+        except Exception as e:
+            logger.error(f"BitNet generation error: {e}")
+            return await self._generate_tiny(request, start_time)
 
 
 # Global engine instance
@@ -302,11 +330,13 @@ async def unload_tiny_model(model_name: str):
 
 
 @app.post("/switch-provider")
-async def switch_provider(provider: str):
+async def switch_provider(provider: Optional[str] = None, payload: Optional[Dict[str, Any]] = Body(default=None)):
     """Switch LLM provider."""
     try:
-        if provider not in ["openai", "tiny", "ollama"]:
-            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai', 'tiny', or 'ollama'")
+        if provider is None and payload:
+            provider = payload.get("provider")
+        if provider not in ["openai", "tiny", "ollama", "bitnet"]:
+            raise HTTPException(status_code=400, detail="Invalid provider. Must be 'openai', 'tiny', 'ollama', or 'bitnet'")
         
         old_provider = llm_engine.provider
         llm_engine.provider = provider

@@ -20,19 +20,17 @@ faiss-cpu==1.7.4
 prometheus-client==0.19.0
 prometheus-fastapi-instrumentator==6.1.0
 
-# Database
-sqlalchemy==2.0.25
-alembic==1.13.1
-psycopg2-binary==2.9.9
-
 # SMS/GSM Integration
 gammu==3.2.5
 pyserial==3.5
 at-commands==1.0.1
+spidev>=3.6
+RPi.GPIO>=0.7.1
+pynmea2>=1.19.0
+smbus2>=0.4.3
 
 # Message Queue
 redis==5.0.1
-celery==5.3.4
 
 # Utilities
 aiofiles==23.2.1

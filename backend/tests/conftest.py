@@ -89,6 +89,10 @@ def mock_message_queue():
     mock_queue.dequeue_message = AsyncMock(return_value=None)
     mock_queue.mark_sent = AsyncMock()
     mock_queue.mark_failed = AsyncMock()
+    mock_queue.set_send_handler = AsyncMock()
+    mock_queue.set_receive_handler = AsyncMock()
+    mock_queue.start_processing = AsyncMock()
+    mock_queue.close = AsyncMock()
     mock_queue.get_queue_stats = AsyncMock(return_value={
         "pending": 0,
         "processing": 0,
@@ -111,11 +115,54 @@ def mock_llm_response():
     }
 
 
+class _AsyncLocalResponse:
+    def __init__(self, status_code: int, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _AsyncLocalHttpClient:
+    """Route async calls to in-process TestClients by URL."""
+
+    def __init__(self):
+        self.sms = TestClient(sms_app)
+        self.llm = TestClient(llm_app)
+        self.router = TestClient(router_app)
+
+    def _select_client(self, url: str):
+        if "8001" in url:
+            return self.sms
+        if "8003" in url:
+            return self.llm
+        return self.router
+
+    def _extract_path(self, url: str) -> str:
+        if "://" not in url:
+            return url
+        _, _, rest = url.partition("://")
+        path_start = rest.find("/")
+        return rest[path_start:] if path_start >= 0 else "/"
+
+    async def post(self, url: str, json=None):
+        client = self._select_client(url)
+        path = self._extract_path(url)
+        resp = client.post(path, json=json)
+        return _AsyncLocalResponse(resp.status_code, resp.json())
+
+    async def get(self, url: str):
+        client = self._select_client(url)
+        path = self._extract_path(url)
+        resp = client.get(path)
+        return _AsyncLocalResponse(resp.status_code, resp.json())
+
+
 @pytest.fixture
-async def http_client():
-    """HTTP client for integration tests."""
-    async with httpx.AsyncClient() as client:
-        yield client
+def http_client():
+    """Async-compatible local test client used by integration tests."""
+    return _AsyncLocalHttpClient()
 
 
 @pytest.fixture(autouse=True)

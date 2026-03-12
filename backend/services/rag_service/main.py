@@ -28,6 +28,7 @@ class RAGService:
         self.client = None
         self.collection = None
         self.openai_client = None
+        self.min_similarity = settings.rag_min_similarity
         
         # Initialize services
         self.embedding_service = LocalEmbeddingService()
@@ -112,42 +113,45 @@ class RAGService:
     async def _sync_local_documents(self):
         """Sync local documents with ChromaDB."""
         try:
-            # Get all documents from document manager
-            doc_stats = self.document_manager.get_statistics()
-            local_doc_count = doc_stats["total_documents"]
-            chroma_doc_count = self.collection.count() if self.collection else 0
-            
-            if local_doc_count > 0 and local_doc_count != chroma_doc_count:
-                logger.info(f"Syncing {local_doc_count} local documents to ChromaDB")
-                
-                # Get all categories
-                categories = await self.document_manager.get_all_categories()
-                
-                for category in categories:
-                    documents = await self.document_manager.get_documents_by_category(category)
-                    
-                    for doc in documents:
-                        doc_id = doc["id"]
-                        text = doc["text"]
-                        metadata = {
-                            "category": doc.get("category", "general"),
-                            "title": doc.get("title", ""),
-                            "created_at": doc.get("created_at", ""),
-                            "keywords": ",".join(doc.get("keywords", [])),
-                            **doc.get("metadata", {})
-                        }
-                        
-                        # Add to ChromaDB
-                        try:
-                            self.collection.add(
-                                documents=[text],
-                                ids=[doc_id],
-                                metadatas=[metadata]
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to add document {doc_id} to ChromaDB: {e}")
-                
-                logger.info("Local documents synced to ChromaDB")
+            if not self.collection:
+                return
+
+            local_docs = await self.document_manager.get_all_documents()
+            local_index = self.document_manager.get_document_index()
+            chroma_ids = set(self.collection.get(include=["metadatas"]).get("ids", []))
+            local_ids = set(local_index.keys())
+
+            # Remove stale Chroma docs that no longer exist locally.
+            stale_ids = list(chroma_ids - local_ids)
+            if stale_ids:
+                self.collection.delete(ids=stale_ids)
+
+            # Upsert changed/new docs based on hash in metadata.
+            for doc in local_docs:
+                doc_id = doc["id"]
+                doc_hash = local_index[doc_id]
+                existing = self.collection.get(ids=[doc_id], include=["metadatas"])
+                existing_metadatas = existing.get("metadatas") or []
+                existing_meta = existing_metadatas[0] if existing_metadatas else None
+                if existing_meta and existing_meta.get("content_hash") == doc_hash:
+                    continue
+
+                metadata = {
+                    "category": doc.get("category", "general"),
+                    "title": doc.get("title", ""),
+                    "created_at": doc.get("created_at", ""),
+                    "keywords": ",".join(doc.get("keywords", [])),
+                    "content_hash": doc_hash,
+                    "deployment_region": settings.deployment_region,
+                    **doc.get("metadata", {})
+                }
+                self.collection.upsert(
+                    documents=[doc["text"]],
+                    ids=[doc_id],
+                    metadatas=[metadata]
+                )
+
+            logger.info(f"Local documents synced to ChromaDB (local={len(local_ids)} chroma={self.collection.count()})")
                 
         except Exception as e:
             logger.error(f"Failed to sync local documents: {e}")
@@ -362,7 +366,10 @@ class RAGService:
                 combined_results.values(),
                 key=lambda x: x["score"],
                 reverse=True
-            )[:top_k]
+            )
+
+            # Filter out weak/noisy matches before returning.
+            sorted_results = [result for result in sorted_results if result["score"] >= self.min_similarity][:top_k]
             
             # Extract components for RAGResult
             documents = [result["document"] for result in sorted_results]
