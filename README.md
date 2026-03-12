@@ -5,15 +5,15 @@
 [![Status](https://img.shields.io/badge/Status-Implementation%20Ready-blue.svg)](https://github.com/evy-ai/evy)
 [![Architecture](https://img.shields.io/badge/Architecture-lilEVY%20%7C%20bigEVY-blue.svg)](https://github.com/evy-ai/evy)
 [![Mesh Network](https://img.shields.io/badge/Mesh%20Network-LoRa%20Radio-orange.svg)](https://github.com/evy-ai/evy)
-[![Edge Focus](https://img.shields.io/badge/Edge-Raspberry%20Pi%204-yellow.svg)](https://github.com/evy-ai/evy)
+[![Edge Focus](https://img.shields.io/badge/Edge-Raspberry%20Pi%205-yellow.svg)](https://github.com/evy-ai/evy)
 [![License](https://img.shields.io/badge/License-Open%20Source-brightgreen.svg)](https://github.com/evy-ai/evy)
 
 ## 🌟 Overview
 
-**EVY is an SMS-based AI community platform** optimized for edge deployment on Raspberry Pi 4 hardware. The system provides off-grid AI assistance accessible via SMS, designed for community action, information access, and knowledge sharing—with emergency response as a critical feature. Built for resource-constrained environments where traditional internet infrastructure is unavailable or unreliable.
+**EVY is an SMS-based AI community platform** optimized for edge deployment on Raspberry Pi 5 hardware. The system provides off-grid AI assistance accessible via SMS, designed for community action, information access, and knowledge sharing—with emergency response as a critical feature. Built for resource-constrained environments where traditional internet infrastructure is unavailable or unreliable.
 
 ### 🚀 **Key Innovations**
-- **Edge-Optimized**: Designed for Raspberry Pi 4 with hardware constraints in mind
+- **Edge-Optimized**: Designed for Raspberry Pi 5 with hardware constraints in mind
 - **Community Platform**: Information, knowledge sharing, and community action
 - **Emergency Response**: Critical disaster response and emergency communication capabilities
 - **Hybrid Architecture**: Rust (critical path) + Python (ecosystem) for optimal performance
@@ -41,9 +41,9 @@
 ### **Dual-Node System**
 
 #### **🌱 lilEVY (Edge Node)**
-- **Hardware**: Raspberry Pi 4 (8GB RAM) + GSM HAT + LoRa HAT
+- **Hardware**: Raspberry Pi 5 (8GB/16GB RAM) + GSM HAT + LoRa HAT
 - **Power**: Solar-powered (50-100W panel, 10-15W consumption)
-- **Capabilities**: SMS interface, tiny LLM inference (4-bit quantized), local RAG, mesh networking
+- **Capabilities**: SMS interface, tiny LLM inference (BitNet/edge models), local RAG, mesh networking
 - **Range**: 10-15 miles via LoRa mesh network
 - **Cost**: ~$450 per node
 - **Edge Constraints**: 8GB RAM, 4 cores, ARM64, microSD storage
@@ -69,7 +69,7 @@ Communication Layers:
 ## 🧩 **Idealized Component Blueprint (Current)**
 
 ### **lilEVY Hardware Profile (Edge Node)**
-- **Compute**: Raspberry Pi 4 (4GB/8GB)
+- **Compute**: Raspberry Pi 5 (8GB/16GB)
 - **Cellular/SMS + GNSS**: SIM7600-series 4G HAT over USB (`/dev/ttyUSB0`, `/dev/ttyUSB1`)
 - **LoRa Mesh**: SX1276 LoRa HAT over SPI (`/dev/spidev0.0`) with configurable CS pin
 - **GPS**: NMEA source from LoRa/GPS HAT UART or SIM7600 GNSS path
@@ -97,9 +97,9 @@ Communication Layers:
 ### **🌱 lilEVY Node (Edge)**
 ```yaml
 Core Components:
-  Raspberry Pi 4 (4GB RAM): $75
-    - ARM Cortex-A72 quad-core 64-bit processor
-    - 4GB LPDDR4 RAM
+  Raspberry Pi 5 (8GB RAM): $80-100
+    - ARM Cortex-A76 quad-core 64-bit processor
+    - 8GB LPDDR5 RAM (16GB optional)
     - Gigabit Ethernet, WiFi, Bluetooth
     - 40-pin GPIO header
 
@@ -221,8 +221,8 @@ Total Enhanced lilEVY: ~$450
 ### **🔌 Development & Testing Hardware**
 ```yaml
 Development Setup:
-  Raspberry Pi 4 Kit: $100
-    - Pi 4, power supply, case
+  Raspberry Pi 5 Kit: $120
+    - Pi 5, power supply, case
     - MicroSD card, cables
     - For development/testing
 
@@ -248,10 +248,10 @@ Development Cost: ~$400
 ```yaml
 lilEVY Compatibility:
   Raspberry Pi Models:
-    ✅ Pi 4 (4GB/8GB) - Recommended
-    ✅ Pi 3B+ - Compatible (slower)
-    ⚠️ Pi Zero 2W - Limited (low power)
-    ❌ Pi 1/2 - Not supported
+    ✅ Pi 5 (8GB/16GB) - Recommended
+    ✅ Pi 4 (8GB) - Compatible fallback
+    ⚠️ Pi 3B+ - Limited performance
+    ❌ Pi 1/2/Zero - Not supported
 
   GSM HAT Compatibility:
     ✅ SIM800L - Primary support
@@ -266,8 +266,8 @@ lilEVY Compatibility:
     ❌ SX1280 - Different frequency
 
   Power Requirements:
-    Pi 4 + GSM HAT: ~5W
-    Pi 4 + GSM + LoRa: ~5.5W
+    Pi 5 + GSM HAT: ~8W
+    Pi 5 + GSM + LoRa: ~10W
     Solar Panel: 50W minimum
     Battery: 36Ah recommended
 ```
@@ -341,7 +341,7 @@ Cost per User (100 users/node):
   - LoRa Node Communication + Emergency Response
   - Edge DB + Shared integration modules
 - **Framework**: Python 3.11, FastAPI, Uvicorn
-- **LLM**: TinyLlama + BitNet-capable provider path
+- **LLM**: BitNet-first edge inference path
 - **Vector DB**: ChromaDB (persistent edge store)
 - **Database**: SQLite (edge-first persistence)
 - **Monitoring**: Prometheus (edge metrics)
@@ -581,12 +581,12 @@ Compression:
 
 ### **Resource Usage (Edge Constraints)**
 ```yaml
-lilEVY Node (Raspberry Pi 4, 8GB RAM):
+lilEVY Node (Raspberry Pi 5, 8GB RAM):
   Memory Budget:
     OS & System: 1.0GB
     Rust Services: 0.5GB (SMS, Router, Compression, Mesh)
     Python Services: 1.5GB (LLM, RAG, Emergency)
-    Models: 2.0GB (TinyLlama 4-bit)
+    Models: 2.0GB (BitNet-class edge models)
     Database Cache: 0.5GB
     Buffer: 1.4GB
     Total: 7.0GB (87.5% utilization)
