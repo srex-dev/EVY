@@ -59,6 +59,46 @@ def build_stage_commands(stage: str) -> List[Dict[str, List[str]]]:
     return commands[stage]
 
 
+def evaluate_release_gates(results: List[Dict]) -> Dict:
+    """Evaluate release gates from suite results."""
+    by_name = {item["name"]: item for item in results}
+    gates = []
+
+    def add_gate(gate_id: str, passed: bool, detail: str) -> None:
+        gates.append({"gate": gate_id, "pass": passed, "detail": detail})
+
+    required = [
+        "llm_inference_tests",
+        "router_enhancement_tests",
+        "routing_model_tests",
+        "sms_gateway_tests",
+        "integration_tests",
+    ]
+    for name in required:
+        item = by_name.get(name)
+        add_gate(
+            f"required_{name}",
+            bool(item and item["pass"]),
+            f"{name} must pass",
+        )
+
+    perf = by_name.get("integration_performance_subset")
+    add_gate(
+        "performance_subset_under_30s",
+        bool(perf and perf["pass"] and perf["elapsed_seconds"] <= 30),
+        "integration performance subset must pass within 30s",
+    )
+
+    resilience = by_name.get("message_queue_retries")
+    add_gate(
+        "retry_path_passes",
+        bool(resilience and resilience["pass"]),
+        "retry and dead-letter behavior test must pass",
+    )
+
+    return {"pass": all(g["pass"] for g in gates), "gates": gates}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run software validation suite.")
     parser.add_argument(
@@ -97,6 +137,7 @@ def main() -> int:
         "failed": sum(1 for r in results if not r["pass"]),
         "results": results,
     }
+    summary["release_gates"] = evaluate_release_gates(results)
 
     report_path = Path(args.report)
     report_path.parent.mkdir(parents=True, exist_ok=True)

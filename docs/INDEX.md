@@ -59,6 +59,7 @@ This index groups all project documentation in one place.
 - [Testing Plan](TESTING_PLAN.md)
 - [Software Validation Checklist](SOFTWARE_VALIDATION_CHECKLIST.md)
 - [Hardware Validation Checklist](HARDWARE_VALIDATION_CHECKLIST.md)
+- [Edge Load Profile](EDGE_LOAD_PROFILE.md)
 - [SMS Throughput Analysis](SMS_THROUGHPUT_ANALYSIS.md)
 - [SMS Gateway Alternatives](SMS_GATEWAY_ALTERNATIVES.md)
 - [Enhancements Review](ENHANCEMENTS_REVIEW.md)

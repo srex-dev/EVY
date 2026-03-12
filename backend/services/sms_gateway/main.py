@@ -1,6 +1,6 @@
 """SMS Gateway Service - Handles SMS communication."""
 import asyncio
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any
@@ -8,6 +8,7 @@ import httpx
 from datetime import datetime
 import signal
 import sys
+import os
 
 from backend.shared.models import SMSMessage, ServiceHealth, ErrorResponse, MessagePriority
 from backend.shared.config import settings
@@ -25,7 +26,7 @@ class SMSGateway:
     def __init__(self):
         self.sent_messages: List[SMSMessage] = []
         self.received_messages: List[SMSMessage] = []
-        self.message_router_url = f"http://localhost:{settings.message_router_port}"
+        self.message_router_url = os.getenv("MESSAGE_ROUTER_URL", settings.message_router_url)
         
         # GSM Driver (prefer direct serial AT on SIM7600-class modules)
         self.gsm_driver = GSMDriver()
@@ -42,6 +43,11 @@ class SMSGateway:
         # Processing tasks
         self.queue_task = None
         self.receive_task = None
+        self.inbound_task = None
+        self.inbound_queue: asyncio.Queue[SMSMessage] = asyncio.Queue(
+            maxsize=settings.sms_inbound_queue_maxsize
+        )
+        self.failed_forwards: List[Dict[str, Any]] = []
         
         # Rate limiting
         self.last_send_times = {}
@@ -186,7 +192,9 @@ class SMSGateway:
                 logger.error(f"Message validation errors: {validation['errors']}")
             
             # Forward to message router for processing
-            await self.forward_to_router(message)
+            forwarded = await self.forward_to_router(message)
+            if not forwarded:
+                self._record_failed_forward(message, "router_forward_failed")
             
         except Exception as e:
             logger.error(f"Failed to process received SMS: {e}")
@@ -220,23 +228,67 @@ class SMSGateway:
             except Exception as e:
                 logger.error(f"Error in SMS receive loop: {e}")
                 await asyncio.sleep(30)  # Wait longer on error
-    
-    async def forward_to_router(self, message: SMSMessage) -> None:
-        """Forward message to message router service."""
+
+    async def _inbound_process_loop(self) -> None:
+        """Bounded worker for inbound SMS processing."""
+        while True:
+            try:
+                message = await self.inbound_queue.get()
+                try:
+                    await self.receive_sms(message)
+                finally:
+                    self.inbound_queue.task_done()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"Error in inbound processing loop: {e}")
+                await asyncio.sleep(1)
+
+    async def queue_inbound_sms(self, message: SMSMessage) -> bool:
+        """Queue inbound SMS with bounded backpressure."""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.message_router_url}/route",
-                    json=message.model_dump(mode='json'),
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    logger.info(f"Message forwarded to router: {message.id}")
-                else:
+            if self.inbound_task is None or self.inbound_task.done():
+                self.inbound_task = asyncio.create_task(self._inbound_process_loop())
+            self.inbound_queue.put_nowait(message)
+            return True
+        except asyncio.QueueFull:
+            logger.error("Inbound SMS queue full; rejecting message")
+            return False
+    
+    async def forward_to_router(self, message: SMSMessage) -> bool:
+        """Forward message to message router service."""
+        for attempt in range(1, settings.sms_forward_max_retries + 1):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{self.message_router_url}/route",
+                        json=message.model_dump(mode='json'),
+                        timeout=settings.sms_router_timeout_seconds
+                    )
+                    if response.status_code == 200:
+                        logger.info(f"Message forwarded to router: {message.id}")
+                        return True
                     logger.error(f"Failed to forward message: {response.status_code}")
-        except Exception as e:
-            logger.error(f"Error forwarding to router: {e}")
+            except Exception as e:
+                logger.error(f"Error forwarding to router (attempt {attempt}): {e}")
+            if attempt < settings.sms_forward_max_retries:
+                await asyncio.sleep(settings.sms_forward_retry_backoff_seconds * attempt)
+        return False
+
+    def _record_failed_forward(self, message: SMSMessage, reason: str) -> None:
+        """Record failed router-forward events as a dead-letter buffer."""
+        self.failed_forwards.append(
+            {
+                "id": message.id,
+                "sender": message.sender,
+                "receiver": message.receiver,
+                "timestamp": datetime.utcnow().isoformat(),
+                "reason": reason,
+            }
+        )
+        # Keep dead-letter list bounded in-memory.
+        if len(self.failed_forwards) > 1000:
+            self.failed_forwards = self.failed_forwards[-1000:]
     
     def _check_rate_limit(self, phone_number: str) -> bool:
         """Check if sending to this number is within rate limits."""
@@ -275,6 +327,8 @@ class SMSGateway:
                 self.queue_task.cancel()
             if self.receive_task:
                 self.receive_task.cancel()
+            if self.inbound_task:
+                self.inbound_task.cancel()
             
             # Disconnect GSM drivers
             if self.gsm_driver:
@@ -354,7 +408,15 @@ async def health_check():
             "received_messages": len(sms_gateway.received_messages),
             "gsm_status": gsm_status,
             "queue_enabled": sms_gateway.queue_enabled,
-            "queue_stats": queue_stats
+            "queue_stats": queue_stats,
+            "inbound_queue_depth": sms_gateway.inbound_queue.qsize(),
+            "failed_forwards": len(sms_gateway.failed_forwards),
+            "edge_targets": {
+                "inbound_sms_per_minute": settings.edge_target_inbound_sms_per_minute,
+                "p95_response_ms": settings.edge_target_p95_response_ms,
+                "max_queue_depth": settings.edge_target_max_queue_depth,
+                "memory_ceiling_mb": settings.edge_target_memory_ceiling_mb,
+            },
         }
     )
 
@@ -371,10 +433,12 @@ async def send_sms(message: SMSMessage):
 
 
 @app.post("/sms/receive", response_model=dict)
-async def receive_sms(message: SMSMessage, background_tasks: BackgroundTasks):
+async def receive_sms(message: SMSMessage):
     """Receive an incoming SMS message."""
-    background_tasks.add_task(sms_gateway.receive_sms, message)
-    return {"status": "received", "message": "Processing in background"}
+    accepted = await sms_gateway.queue_inbound_sms(message)
+    if not accepted:
+        raise HTTPException(status_code=429, detail="Inbound SMS queue is full")
+    return {"status": "received", "message": "Queued for processing"}
 
 
 @app.get("/sms/sent", response_model=List[SMSMessage])

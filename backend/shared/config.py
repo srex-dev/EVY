@@ -51,6 +51,13 @@ class Settings(BaseSettings):
 
     # Runtime behavior
     local_first_routing: bool = True
+
+    # Edge service URLs (overridable for container networking)
+    sms_gateway_url: str = "http://localhost:8000"
+    message_router_url: str = "http://localhost:8001"
+    llm_inference_url: str = "http://localhost:8002"
+    rag_service_url: str = "http://localhost:8003"
+    privacy_filter_url: str = "http://localhost:8004"
     
     # Security
     secret_key: str = "change_this_secret_key_in_production"
@@ -60,6 +67,22 @@ class Settings(BaseSettings):
     # Rate Limiting
     max_sms_per_minute: int = 10
     max_sms_per_hour: int = 100
+
+    # Edge load envelope and backpressure
+    edge_target_inbound_sms_per_minute: int = 20
+    edge_target_p95_response_ms: int = 12000
+    edge_target_max_queue_depth: int = 500
+    edge_target_memory_ceiling_mb: int = 4096
+    sms_inbound_queue_maxsize: int = 500
+    sms_outbound_queue_maxsize: int = 1000
+    sms_forward_max_retries: int = 3
+    sms_forward_retry_backoff_seconds: int = 2
+    sms_router_timeout_seconds: float = 15.0
+    llm_request_timeout_seconds: float = 20.0
+    llm_max_inflight_requests: int = 2
+    llm_max_loaded_models: int = 2
+    rag_chunk_size_chars: int = 600
+    rag_chunk_overlap_chars: int = 120
     
     # Monitoring
     prometheus_port: int = 9090

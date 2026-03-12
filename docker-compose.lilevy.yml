@@ -19,6 +19,11 @@ services:
       - LOG_LEVEL=INFO
       - LLM_PROVIDER=ollama
       - DEFAULT_MODEL=tinyllama
+      - MESSAGE_ROUTER_URL=http://message-router:8001
+      - SMS_INBOUND_QUEUE_MAXSIZE=500
+      - SMS_OUTBOUND_QUEUE_MAXSIZE=1000
+      - SMS_FORWARD_MAX_RETRIES=3
+      - SMS_ROUTER_TIMEOUT_SECONDS=15
     volumes:
       - ./data/lilevy:/data
     devices:
@@ -33,6 +38,8 @@ services:
       start_period: 20s
     networks:
       - lilevy-network
+    cpus: 1.0
+    mem_limit: 512m
 
   message-router:
     build:
@@ -48,6 +55,9 @@ services:
       - LLM_SERVICE_URL=http://tiny-llm:8002
       - RAG_SERVICE_URL=http://local-rag:8003
       - PRIVACY_FILTER_URL=http://privacy-filter:8004
+      - SMS_GATEWAY_URL=http://sms-gateway:8000
+      - LLM_MAX_INFLIGHT_REQUESTS=2
+      - LLM_REQUEST_TIMEOUT_SECONDS=20
       - LOG_LEVEL=INFO
       - LLM_PROVIDER=ollama
       - DEFAULT_MODEL=tinyllama
@@ -69,6 +79,8 @@ services:
       start_period: 25s
     networks:
       - lilevy-network
+    cpus: 1.0
+    mem_limit: 512m
 
   tiny-llm:
     build:
@@ -87,6 +99,9 @@ services:
       - RESPONSE_TIME_TARGET=10
       - LOG_LEVEL=INFO
       - LLM_PROVIDER=ollama
+      - LLM_MAX_INFLIGHT_REQUESTS=2
+      - LLM_MAX_LOADED_MODELS=2
+      - LLM_REQUEST_TIMEOUT_SECONDS=20
     volumes:
       - ./models/tiny:/models
       - ./data/lilevy:/data
@@ -99,6 +114,8 @@ services:
       start_period: 30s
     networks:
       - lilevy-network
+    cpus: 2.0
+    mem_limit: 2g
 
   local-rag:
     build:
@@ -116,6 +133,8 @@ services:
       - LOG_LEVEL=INFO
       - EMBEDDING_CACHE_DIR=/data/models/embedding_cache
       - RAG_MIN_SIMILARITY=0.5
+      - RAG_CHUNK_SIZE_CHARS=600
+      - RAG_CHUNK_OVERLAP_CHARS=120
     volumes:
       - ./data/lilevy/knowledge:/data/lilevy_knowledge
       - ./data/lilevy/chroma:/data/chroma
@@ -129,6 +148,8 @@ services:
       start_period: 30s
     networks:
       - lilevy-network
+    cpus: 1.0
+    mem_limit: 1g
 
   privacy-filter:
     build:

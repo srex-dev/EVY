@@ -39,6 +39,7 @@ class RAGImporter:
         """Import a single document to the RAG service"""
         try:
             payload = {
+                "doc_id": document.get("id"),
                 "text": document["text"],
                 "metadata": document.get("metadata", {})
             }

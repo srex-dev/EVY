@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
 from enum import Enum
 import logging
+from backend.shared.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class SMSMessageQueue:
         self.failed_queue = "sms_failed"
         self.sent_queue = "sms_sent"
         self.retry_delays = [60, 300, 900]  # 1min, 5min, 15min
+        self.max_queue_depth = settings.sms_outbound_queue_maxsize
         
         # Message handlers
         self.send_handler: Optional[Callable] = None
@@ -104,6 +106,14 @@ class SMSMessageQueue:
         )
         
         try:
+            # Backpressure: reject when queue is beyond configured edge envelope.
+            pending = self.redis_client.zcard(self.queue_name)
+            processing = self.redis_client.zcard(self.processing_queue)
+            if (pending + processing) >= self.max_queue_depth:
+                raise ValueError(
+                    f"Outbound queue is full (depth={pending + processing}, max={self.max_queue_depth})"
+                )
+
             # Store message
             self.redis_client.hset(f"message:{message_id}", mapping=message.to_dict())
             

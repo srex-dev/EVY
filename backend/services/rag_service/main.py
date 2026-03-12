@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 from datetime import datetime
 
-from backend.shared.models import RAGQuery, RAGResult, ServiceHealth
+from backend.shared.models import RAGQuery, RAGResult, ServiceHealth, RAGAddDocumentRequest
 from backend.shared.config import settings
 from backend.shared.logging import setup_logger
 from backend.services.rag_service.embedding_service import LocalEmbeddingService, SimpleEmbeddingService
@@ -118,22 +118,29 @@ class RAGService:
 
             local_docs = await self.document_manager.get_all_documents()
             local_index = self.document_manager.get_document_index()
-            chroma_ids = set(self.collection.get(include=["metadatas"]).get("ids", []))
             local_ids = set(local_index.keys())
+            chroma_snapshot = self.collection.get(include=["metadatas"])
+            chroma_ids = chroma_snapshot.get("ids", [])
+            chroma_metadatas = chroma_snapshot.get("metadatas", [])
+            parent_to_chunk_ids: Dict[str, List[str]] = {}
+            parent_to_hash: Dict[str, str] = {}
+            for idx, chunk_id in enumerate(chroma_ids):
+                metadata = chroma_metadatas[idx] if idx < len(chroma_metadatas) else {}
+                parent_id = metadata.get("parent_doc_id") or chunk_id.split("::", 1)[0]
+                parent_to_chunk_ids.setdefault(parent_id, []).append(chunk_id)
+                if metadata.get("content_hash"):
+                    parent_to_hash[parent_id] = metadata["content_hash"]
 
             # Remove stale Chroma docs that no longer exist locally.
-            stale_ids = list(chroma_ids - local_ids)
-            if stale_ids:
-                self.collection.delete(ids=stale_ids)
+            stale_parent_ids = list(set(parent_to_chunk_ids.keys()) - local_ids)
+            for parent_id in stale_parent_ids:
+                self.collection.delete(ids=parent_to_chunk_ids[parent_id])
 
             # Upsert changed/new docs based on hash in metadata.
             for doc in local_docs:
                 doc_id = doc["id"]
                 doc_hash = local_index[doc_id]
-                existing = self.collection.get(ids=[doc_id], include=["metadatas"])
-                existing_metadatas = existing.get("metadatas") or []
-                existing_meta = existing_metadatas[0] if existing_metadatas else None
-                if existing_meta and existing_meta.get("content_hash") == doc_hash:
+                if parent_to_hash.get(doc_id) == doc_hash:
                     continue
 
                 metadata = {
@@ -145,11 +152,7 @@ class RAGService:
                     "deployment_region": settings.deployment_region,
                     **doc.get("metadata", {})
                 }
-                self.collection.upsert(
-                    documents=[doc["text"]],
-                    ids=[doc_id],
-                    metadatas=[metadata]
-                )
+                await self._upsert_document_chunks(doc_id, doc["text"], metadata, doc_hash)
 
             logger.info(f"Local documents synced to ChromaDB (local={len(local_ids)} chroma={self.collection.count()})")
                 
@@ -272,9 +275,10 @@ class RAGService:
             # Convert to standard format
             vector_results = []
             for i, doc in enumerate(documents):
+                metadata = metadatas[i] if i < len(metadatas) else {}
                 vector_results.append({
                     "document": doc,
-                    "metadata": metadatas[i] if i < len(metadatas) else {},
+                    "metadata": metadata,
                     "score": 1 / (1 + distances[i]) if i < len(distances) else 0.5,
                     "source": "vector"
                 })
@@ -307,7 +311,7 @@ class RAGService:
                         "keywords": ",".join(result["document"].get("keywords", [])),
                         **result["document"].get("metadata", {})
                     },
-                    "score": result["score"] / 10.0,  # Normalize score
+                    "score": min(result["score"] / 15.0, 1.0),
                     "source": "text"
                 })
             
@@ -329,25 +333,25 @@ class RAGService:
             # Create combined results with deduplication
             combined_results = {}
             
-            # Add vector results with higher weight
+            # Add vector results
             for result in vector_results:
-                doc_id = hashlib.md5(result["document"].encode()).hexdigest()[:8]
+                doc_id = hashlib.sha256(result["document"].encode()).hexdigest()
                 if doc_id not in combined_results:
                     combined_results[doc_id] = {
                         "document": result["document"],
                         "metadata": result["metadata"],
-                        "score": result["score"] * 1.2,  # Boost vector results
+                        "score": result["score"],
                         "sources": [result["source"]]
                     }
                 else:
                     # Combine scores from different sources
                     existing = combined_results[doc_id]
-                    existing["score"] = max(existing["score"], result["score"] * 1.2)
+                    existing["score"] = max(existing["score"], result["score"])
                     existing["sources"].append(result["source"])
             
             # Add text results
             for result in text_results:
-                doc_id = hashlib.md5(result["document"].encode()).hexdigest()[:8]
+                doc_id = hashlib.sha256(result["document"].encode()).hexdigest()
                 if doc_id not in combined_results:
                     combined_results[doc_id] = {
                         "document": result["document"],
@@ -404,13 +408,11 @@ class RAGService:
                 doc_id=doc_id
             )
             
+            doc_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+
             # Add to ChromaDB if available
             if self.collection:
-                self.collection.add(
-                    documents=[text],
-                    ids=[doc_id],
-                    metadatas=[doc_metadata]
-                )
+                await self._upsert_document_chunks(doc_id, text, doc_metadata, doc_hash)
             
             self.stats["total_documents_added"] += 1
             logger.info(f"Added document: {doc_id}")
@@ -419,6 +421,59 @@ class RAGService:
         except Exception as e:
             logger.error(f"Failed to add document: {e}")
             return False
+
+    def _chunk_text(self, text: str) -> List[str]:
+        """Chunk long documents for better retrieval quality."""
+        chunk_size = max(100, settings.rag_chunk_size_chars)
+        overlap = max(0, min(settings.rag_chunk_overlap_chars, chunk_size // 2))
+        stripped = text.strip()
+        if len(stripped) <= chunk_size:
+            return [stripped]
+
+        chunks: List[str] = []
+        start = 0
+        length = len(stripped)
+        while start < length:
+            end = min(length, start + chunk_size)
+            chunk = stripped[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            if end >= length:
+                break
+            start = max(0, end - overlap)
+        return chunks
+
+    async def _upsert_document_chunks(
+        self,
+        doc_id: str,
+        text: str,
+        metadata: Dict[str, Any],
+        content_hash: str,
+    ) -> None:
+        """Upsert all chunks for a parent document."""
+        if not self.collection:
+            return
+
+        # Remove previous chunks for this parent doc if present.
+        existing = self.collection.get(where={"parent_doc_id": doc_id})
+        existing_ids = existing.get("ids", [])
+        if existing_ids:
+            self.collection.delete(ids=existing_ids)
+
+        chunks = self._chunk_text(text)
+        chunk_ids = [f"{doc_id}::chunk::{idx}" for idx in range(len(chunks))]
+        chunk_metadatas = []
+        for idx, _ in enumerate(chunks):
+            chunk_metadatas.append(
+                {
+                    **metadata,
+                    "parent_doc_id": doc_id,
+                    "chunk_index": idx,
+                    "chunk_count": len(chunks),
+                    "content_hash": content_hash,
+                }
+            )
+        self.collection.upsert(documents=chunks, ids=chunk_ids, metadatas=chunk_metadatas)
     
     def get_stats(self) -> Dict[str, Any]:
         """Get comprehensive statistics."""
@@ -520,9 +575,10 @@ async def search_knowledge(query: RAGQuery):
 
 
 @app.post("/add")
-async def add_document(doc_id: str, text: str, metadata: Dict[str, Any] = None):
+async def add_document(request: RAGAddDocumentRequest):
     """Add a document to the knowledge base."""
-    success = await rag_service.add_document(doc_id, text, metadata)
+    doc_id = request.doc_id or hashlib.sha256(request.text.encode("utf-8")).hexdigest()[:12]
+    success = await rag_service.add_document(doc_id, request.text, request.metadata)
     if success:
         return {"status": "added", "doc_id": doc_id}
     else:
@@ -560,10 +616,13 @@ async def bulk_add_documents(documents: List[Dict[str, Any]]):
             for doc_data, doc_id in zip(documents, doc_ids):
                 if doc_id:  # Only if document was successfully added
                     try:
-                        rag_service.collection.add(
-                            documents=[doc_data.get('text', '')],
-                            ids=[doc_id],
-                            metadatas=[doc_data.get('metadata', {})]
+                        await rag_service._upsert_document_chunks(
+                            doc_id=doc_id,
+                            text=doc_data.get("text", ""),
+                            metadata=doc_data.get("metadata", {}),
+                            content_hash=hashlib.sha256(
+                                doc_data.get("text", "").encode("utf-8")
+                            ).hexdigest(),
                         )
                     except Exception as e:
                         logger.warning(f"Failed to add document {doc_id} to ChromaDB: {e}")
@@ -583,8 +642,13 @@ async def delete_document(doc_id: str):
         
         if success and rag_service.collection:
             try:
-                # Remove from ChromaDB
-                rag_service.collection.delete(ids=[doc_id])
+                # Remove all chunks for the parent document from ChromaDB.
+                existing = rag_service.collection.get(where={"parent_doc_id": doc_id})
+                chunk_ids = existing.get("ids", [])
+                if chunk_ids:
+                    rag_service.collection.delete(ids=chunk_ids)
+                else:
+                    rag_service.collection.delete(ids=[doc_id])
             except Exception as e:
                 logger.warning(f"Failed to delete document {doc_id} from ChromaDB: {e}")
         

@@ -126,13 +126,14 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
                 return "Model not available"
             
             # Use the tiny model manager for generation
-            result = await self.model_manager.generate_text(
+            result = await self.model_manager.generate_response(
                 prompt=prompt,
-                max_tokens=self.profile.llm.max_tokens,
-                temperature=0.7
+                model_name=self.current_model,
+                max_length=self.profile.llm.max_tokens,
+                temperature=0.7,
             )
-            
-            return result if result else "I couldn't generate a response. Please try again."
+            response_text = result.get("response", "")
+            return response_text if response_text else "I couldn't generate a response. Please try again."
             
         except Exception as e:
             logger.error(f"Tiny model generation failed: {e}")
@@ -184,15 +185,15 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
                 (current_avg * (total_requests - 1) + response_time) / total_requests
             )
     
-    def get_model_status(self) -> Dict[str, Any]:
+    async def get_model_status(self) -> Dict[str, Any]:
         """Get status of loaded models."""
         if self.model_manager:
-            return self.model_manager.get_model_status()
+            return await self.model_manager.get_model_status()
         return {"status": "not_initialized"}
     
-    def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> Dict[str, Any]:
         """Get service statistics."""
-        model_status = self.get_model_status()
+        model_status = await self.get_model_status()
         
         return {
             **self.stats,

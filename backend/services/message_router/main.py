@@ -24,10 +24,10 @@ class MessageRouter:
     """Routes messages to appropriate processing services."""
     
     def __init__(self):
-        self.llm_service_url = f"http://localhost:{settings.llm_inference_port}"
-        self.rag_service_url = f"http://localhost:{settings.rag_service_port}"
-        self.privacy_service_url = f"http://localhost:{settings.privacy_filter_port}"
-        self.sms_gateway_url = f"http://localhost:{settings.sms_gateway_port}"
+        self.llm_service_url = os.getenv("LLM_SERVICE_URL", settings.llm_inference_url)
+        self.rag_service_url = os.getenv("RAG_SERVICE_URL", settings.rag_service_url)
+        self.privacy_service_url = os.getenv("PRIVACY_FILTER_URL", settings.privacy_filter_url)
+        self.sms_gateway_url = os.getenv("SMS_GATEWAY_URL", settings.sms_gateway_url)
         
         # Processing statistics
         self.stats = {
@@ -38,8 +38,11 @@ class MessageRouter:
             "successful_responses": 0,
             "failed_responses": 0,
             "rag_queries": 0,
-            "llm_queries": 0
+            "llm_queries": 0,
+            "llm_timeouts": 0,
+            "overload_rejections": 0
         }
+        self.llm_semaphore = asyncio.Semaphore(settings.llm_max_inflight_requests)
         
         # Emergency keywords
         self.emergency_keywords = ["emergency", "help", "urgent", "911", "danger", "fire", "medical"]
@@ -140,11 +143,15 @@ class MessageRouter:
             )
             
             async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.llm_service_url}/inference",
-                    json=llm_request.model_dump(),
-                    timeout=30.0
-                )
+                try:
+                    response = await client.post(
+                        f"{self.llm_service_url}/inference",
+                        json=llm_request.model_dump(),
+                        timeout=settings.llm_request_timeout_seconds
+                    )
+                except httpx.TimeoutException:
+                    self.stats["llm_timeouts"] += 1
+                    return "LLM is busy. Please retry in a moment."
                 
                 if response.status_code == 200:
                     llm_response = LLMResponse(**response.json())
@@ -174,13 +181,10 @@ class MessageRouter:
                     documents = rag_result.get("documents", [])
                     scores = rag_result.get("scores", [])
                     if documents:
-                        filtered = []
-                        for idx, doc in enumerate(documents):
-                            score = scores[idx] if idx < len(scores) else 0.0
-                            if score >= settings.rag_min_similarity:
-                                filtered.append(doc)
-                        if filtered:
-                            return " ".join(filtered[:2])  # Use top 2 high-confidence results
+                        if scores and len(scores) == len(documents):
+                            best_idx = max(range(len(scores)), key=lambda idx: scores[idx])
+                            return documents[best_idx]
+                        return documents[0]
                 return None
         except Exception as e:
             logger.error(f"Error calling RAG service: {e}")
@@ -197,11 +201,12 @@ class MessageRouter:
                         receiver=original_message.sender,  # Original sender
                         content=chunk
                     )
-                    await client.post(
+                    response = await client.post(
                         f"{self.sms_gateway_url}/sms/send",
                         json=response_message.model_dump(mode='json'),
                         timeout=10.0
                     )
+                    response.raise_for_status()
                 
             logger.info(f"Response sent to {response_message.receiver}")
         except Exception as e:
@@ -279,7 +284,17 @@ class MessageRouter:
                 # Get LLM response
                 if processed.requires_llm:
                     self.stats["llm_queries"] += 1
-                    response = await self.route_to_llm(processed, context)
+                    try:
+                        await asyncio.wait_for(self.llm_semaphore.acquire(), timeout=0.05)
+                    except asyncio.TimeoutError:
+                        self.stats["overload_rejections"] += 1
+                        response = self.response_templates["rate_limited"]
+                        await self.send_response(message, response)
+                        return {"status": "rate_limited", "response": response}
+                    try:
+                        response = await self.route_to_llm(processed, context)
+                    finally:
+                        self.llm_semaphore.release()
                     await self.send_response(message, response)
                     self.stats["successful_responses"] += 1
                     
@@ -410,6 +425,11 @@ async def health_check():
         version="1.0.0",
         details={
             "statistics": stats,
+            "edge_limits": {
+                "llm_max_inflight_requests": settings.llm_max_inflight_requests,
+                "llm_timeout_seconds": settings.llm_request_timeout_seconds,
+                "rag_min_similarity": settings.rag_min_similarity,
+            },
             "services": {
                 "llm_service": message_router.llm_service_url,
                 "rag_service": message_router.rag_service_url,

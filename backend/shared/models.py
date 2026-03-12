@@ -76,6 +76,13 @@ class RAGResult(BaseModel):
     metadata: List[Dict[str, Any]]
 
 
+class RAGAddDocumentRequest(BaseModel):
+    """Request to add a document to the RAG service."""
+    doc_id: Optional[str] = None
+    text: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class ServiceHealth(BaseModel):
     """Health check response."""
     service_name: str

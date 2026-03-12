@@ -32,6 +32,8 @@ class TinyModelManager:
         
         self.loaded_models: Dict[str, Any] = {}
         self.ollama_client = None
+        self._model_lock = asyncio.Lock()
+        self._inference_semaphore = asyncio.Semaphore(settings.llm_max_inflight_requests)
         
         # Tiny model configurations
         self.tiny_models = {
@@ -143,28 +145,39 @@ class TinyModelManager:
     
     async def load_model(self, model_name: str, use_quantization: bool = True) -> bool:
         """Load a tiny model for inference."""
-        try:
-            if model_name in self.loaded_models:
-                logger.info(f"Model {model_name} already loaded")
-                return True
-            
-            logger.info(f"Loading tiny model: {model_name}")
-            
-            # Try Ollama first if available
-            if self.ollama_client and model_name in ["tinyllama", "phi", "gemma", "bitnet-2b"]:
-                if await self._load_ollama_model(model_name):
+        async with self._model_lock:
+            try:
+                if model_name in self.loaded_models:
+                    logger.info(f"Model {model_name} already loaded")
                     return True
-            
-            # Fallback to transformers
-            if model_name in self.tiny_models:
-                return await self._load_transformers_model(model_name, use_quantization)
-            
-            logger.error(f"Unknown model: {model_name}")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Failed to load model {model_name}: {e}")
-            return False
+
+                if len(self.loaded_models) >= settings.llm_max_loaded_models:
+                    # Evict the oldest loaded model to protect edge memory.
+                    oldest_model = next(iter(self.loaded_models.keys()))
+                    oldest_info = self.loaded_models[oldest_model]
+                    if oldest_info["type"] == "transformers":
+                        del oldest_info["model"]
+                        del oldest_info["pipeline"]
+                        del oldest_info["tokenizer"]
+                    del self.loaded_models[oldest_model]
+
+                logger.info(f"Loading tiny model: {model_name}")
+
+                # Try Ollama first if available
+                if self.ollama_client and model_name in ["tinyllama", "phi", "gemma", "bitnet-2b"]:
+                    if await self._load_ollama_model(model_name):
+                        return True
+
+                # Fallback to transformers
+                if model_name in self.tiny_models:
+                    return await self._load_transformers_model(model_name, use_quantization)
+
+                logger.error(f"Unknown model: {model_name}")
+                return False
+
+            except Exception as e:
+                logger.error(f"Failed to load model {model_name}: {e}")
+                return False
     
     async def _load_ollama_model(self, model_name: str) -> bool:
         """Load model via Ollama."""
@@ -277,40 +290,29 @@ class TinyModelManager:
         context: Optional[str] = None
     ) -> Dict[str, Any]:
         """Generate response using loaded model."""
+        model_name = model_name or self.default_tiny_model
         try:
-            model_name = model_name or self.default_tiny_model
-            
-            if model_name not in self.loaded_models:
-                # Try to load the model
-                if not await self.load_model(model_name):
-                    raise ValueError(f"Model {model_name} not available")
-            
-            model_info = self.loaded_models[model_name]
-            start_time = time.time()
-            
-            # Prepare prompt
-            full_prompt = self._prepare_prompt(prompt, context)
-            
-            # Generate response based on model type
-            if model_info["type"] == "ollama":
-                response = await self._generate_ollama_response(
-                    model_info, full_prompt, max_length, temperature
+            async with self._inference_semaphore:
+                return await asyncio.wait_for(
+                    self._generate_response_inner(
+                        prompt=prompt,
+                        model_name=model_name,
+                        max_length=max_length,
+                        temperature=temperature,
+                        context=context,
+                    ),
+                    timeout=settings.llm_request_timeout_seconds,
                 )
-            else:
-                response = await self._generate_transformers_response(
-                    model_info, full_prompt, max_length, temperature
-                )
-            
-            processing_time = time.time() - start_time
-            
+        except asyncio.TimeoutError:
+            logger.error("Inference timed out")
             return {
-                "response": response,
+                "response": "I'm busy right now. Please retry shortly.",
                 "model_used": model_name,
-                "processing_time": processing_time,
-                "tokens_used": len(response.split()),  # Approximate
-                "provider": "local"
+                "processing_time": settings.llm_request_timeout_seconds,
+                "tokens_used": 0,
+                "provider": "local",
+                "error": "timeout",
             }
-            
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return {
@@ -321,6 +323,41 @@ class TinyModelManager:
                 "provider": "local",
                 "error": str(e)
             }
+
+    async def _generate_response_inner(
+        self,
+        prompt: str,
+        model_name: str,
+        max_length: int,
+        temperature: float,
+        context: Optional[str],
+    ) -> Dict[str, Any]:
+        """Internal response generation implementation."""
+        if model_name not in self.loaded_models:
+            if not await self.load_model(model_name):
+                raise ValueError(f"Model {model_name} not available")
+
+        model_info = self.loaded_models[model_name]
+        start_time = time.time()
+        full_prompt = self._prepare_prompt(prompt, context)
+
+        if model_info["type"] == "ollama":
+            response = await self._generate_ollama_response(
+                model_info, full_prompt, max_length, temperature
+            )
+        else:
+            response = await self._generate_transformers_response(
+                model_info, full_prompt, max_length, temperature
+            )
+
+        processing_time = time.time() - start_time
+        return {
+            "response": response,
+            "model_used": model_name,
+            "processing_time": processing_time,
+            "tokens_used": len(response.split()),
+            "provider": "local",
+        }
     
     async def _generate_ollama_response(
         self, 
@@ -365,7 +402,8 @@ class TinyModelManager:
             pipe = model_info["pipeline"]
             
             # Generate response
-            result = pipe(
+            result = await asyncio.to_thread(
+                pipe,
                 prompt,
                 max_length=len(prompt.split()) + min(max_length, 50),
                 temperature=temperature,
@@ -444,30 +482,31 @@ class TinyModelManager:
     
     async def unload_model(self, model_name: str) -> bool:
         """Unload a model to free memory."""
-        try:
-            if model_name in self.loaded_models:
-                model_info = self.loaded_models[model_name]
-                
-                if model_info["type"] == "transformers":
-                    # Clear model from memory
-                    del model_info["model"]
-                    del model_info["pipeline"]
-                    del model_info["tokenizer"]
-                
-                del self.loaded_models[model_name]
-                
-                # Force garbage collection
-                import gc
-                gc.collect()
-                
-                logger.info(f"Unloaded model: {model_name}")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"Failed to unload model {model_name}: {e}")
-            return False
+        async with self._model_lock:
+            try:
+                if model_name in self.loaded_models:
+                    model_info = self.loaded_models[model_name]
+
+                    if model_info["type"] == "transformers":
+                        # Clear model from memory
+                        del model_info["model"]
+                        del model_info["pipeline"]
+                        del model_info["tokenizer"]
+
+                    del self.loaded_models[model_name]
+
+                    # Force garbage collection
+                    import gc
+                    gc.collect()
+
+                    logger.info(f"Unloaded model: {model_name}")
+                    return True
+
+                return False
+
+            except Exception as e:
+                logger.error(f"Failed to unload model {model_name}: {e}")
+                return False
     
     async def get_model_status(self) -> Dict[str, Any]:
         """Get status of all models."""
@@ -503,3 +542,8 @@ class TinyModelManager:
             return {"error": "psutil not available"}
         except Exception as e:
             return {"error": str(e)}
+
+    async def cleanup(self) -> None:
+        """Unload all models and release resources."""
+        for model_name in list(self.loaded_models.keys()):
+            await self.unload_model(model_name)

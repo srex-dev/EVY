@@ -81,6 +81,9 @@ python scripts/test_software_suite.py --stage resilience
 - [ ] Software suite report JSON generated and archived
 - [ ] Failures (if any) are triaged and resolved
 - [ ] Release candidate commit/tag references report artifact
+- [ ] `release_gates.pass` is `true` in software suite report
+- [ ] Performance subset gate elapsed <= 30 seconds
+- [ ] Retry-path gate passes (`message_queue_retries`)
 
 Recommended full run:
 
@@ -94,6 +97,8 @@ python scripts/test_software_suite.py --stage full
 - End-to-end normal query p95 < 45s
 - Emergency path p95 < 15s under mixed load
 - 0 message loss in restart/retry paths in test conditions
+- Inbound queue depth <= 500 at target traffic
+- LLM request timeout <= 20s with overload response instead of silent drop
 
 ## Report Artifact
 

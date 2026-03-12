@@ -266,7 +266,13 @@ async def health_check():
         details={
             "provider": llm_engine.provider,
             "model": settings.default_model,
-            "tiny_models": model_status
+            "tiny_models": model_status,
+            "edge_limits": {
+                "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
+                "llm_max_inflight_requests": settings.llm_max_inflight_requests,
+                "llm_max_loaded_models": settings.llm_max_loaded_models,
+                "memory_ceiling_mb": settings.edge_target_memory_ceiling_mb,
+            },
         }
     )
 
