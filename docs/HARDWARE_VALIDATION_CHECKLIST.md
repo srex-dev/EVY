@@ -1,6 +1,7 @@
 # EVY Hardware Validation Checklist
 
 This checklist is for post-software validation on edge hardware. Run tests in order and log pass/fail with notes.
+Use [First Hardware Bring-Up Runbook](FIRST_HARDWARE_BRINGUP_RUNBOOK.md) for the full first-node bench procedure.
 
 ## Test Order
 

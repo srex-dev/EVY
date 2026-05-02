@@ -31,6 +31,7 @@ This README reflects the current codebase state after a fresh review. It separat
 - [Technology Opportunities](docs/TECHNOLOGY_OPPORTUNITIES.md): decision matrix for additional tech worth considering.
 - [Pre-Hardware Backlog](docs/EVY_PRE_HARDWARE_BACKLOG.md): phased work items to complete before and during hardware arrival.
 - [Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md): verified pre-hardware container path and hardware bring-up order.
+- [First Hardware Bring-Up Runbook](docs/FIRST_HARDWARE_BRINGUP_RUNBOOK.md): exact first Pi/GSM/BitNet bench procedure.
 - [Hardware Validation Checklist](docs/HARDWARE_VALIDATION_CHECKLIST.md): target validation order once hardware is available.
 - [Software Validation Checklist](docs/SOFTWARE_VALIDATION_CHECKLIST.md): current software gate process.
 - [Documentation Index](docs/INDEX.md): all project docs.
@@ -174,6 +175,12 @@ Boot self-check report scaffold:
 
 ```bash
 python scripts/boot_self_check.py
+```
+
+Raspberry Pi bootstrap readiness report:
+
+```bash
+python scripts/pi_bootstrap_check.py --require-docker
 ```
 
 Sample knowledge-pack validation and SQLite RAG import:

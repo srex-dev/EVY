@@ -15,6 +15,7 @@ This index groups all project documentation in one place.
 - [Quick Start Guide](QUICK_START_GUIDE.md)
 - [Development Setup](DEVELOPMENT_SETUP.md)
 - [Deployment Runbook](DEPLOYMENT_RUNBOOK.md)
+- [First Hardware Bring-Up Runbook](FIRST_HARDWARE_BRINGUP_RUNBOOK.md)
 - [Technical Specifications](TECHNICAL_SPECIFICATIONS.md)
 - [API Documentation](API_DOCUMENTATION.md)
 - [Implementation Checklist](IMPLEMENTATION_CHECKLIST.md)
@@ -82,6 +83,7 @@ This index groups all project documentation in one place.
 ## Deployment And Operations
 
 - [Deployment Summary](DEPLOYMENT_SUMMARY.md)
+- [First Hardware Bring-Up Runbook](FIRST_HARDWARE_BRINGUP_RUNBOOK.md)
 - [Pre Deployment Checklist](PRE_DEPLOYMENT_CHECKLIST.md)
 - [Implementation Progress Summary](IMPLEMENTATION_PROGRESS_SUMMARY.md)
 - [Implementation Timeline Review](IMPLEMENTATION_TIMELINE_REVIEW.md)

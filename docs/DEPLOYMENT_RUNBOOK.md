@@ -147,6 +147,8 @@ python scripts/benchmark_bitnet_sms_prompts.py
 
 ## First Hardware Bring-Up Order
 
+For the detailed bench procedure, use [First Hardware Bring-Up Runbook](FIRST_HARDWARE_BRINGUP_RUNBOOK.md).
+
 Do not start with the full system. Bring hardware up in this order:
 
 1. Boot Raspberry Pi and confirm OS, Python, Docker, UART, SPI, and GPIO access.
