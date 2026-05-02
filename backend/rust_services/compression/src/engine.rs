@@ -105,9 +105,10 @@ impl CompressionEngine {
         stats.total_compressions += 1;
         
         // Update running average
-        let n = stats.total_compressions as f64;
+        let n_ratio = stats.total_compressions as f32;
         stats.average_compression_ratio = 
-            (stats.average_compression_ratio * (n - 1.0) + ratio as f64) / n;
+            (stats.average_compression_ratio * (n_ratio - 1.0) + ratio) / n_ratio;
+        let n = stats.total_compressions as f64;
         stats.average_compression_time_ms = 
             (stats.average_compression_time_ms * (n - 1.0) + duration.as_millis() as f64) / n;
         

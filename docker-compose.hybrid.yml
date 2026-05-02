@@ -1,7 +1,5 @@
 # EVY Hybrid Deployment Configuration
 # Runs both lilEVY and bigEVY nodes with inter-node communication
-version: '3.8'
-
 services:
   # lilEVY Node Services
   lilevy-sms-gateway:
@@ -39,14 +37,20 @@ services:
     environment:
       - NODE_TYPE=lilevy
       - NODE_ID=lilevy-001
-      - MODEL_TYPE=tiny
-      - DEFAULT_MODEL=tinyllama
+      - MODEL_TYPE=bitnet
+      - LLM_PROVIDER=bitnet
+      - DEFAULT_MODEL=bitnet-b1.58-2B-4T
+      - BITNET_MODEL=bitnet-b1.58-2B-4T
+      - BITNET_CPP_DIR=/opt/bitnet.cpp
+      - BITNET_MODEL_PATH=/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
       - BIGEVY_FALLBACK=true
       - BIGEVY_LLM_URL=http://bigevy-large-llm:9001
       - HYBRID_MODE=true
       - LOG_LEVEL=INFO
     volumes:
       - ./models/tiny:/models
+      - ./models/bitnet:/models/bitnet
+      - ./third_party/BitNet:/opt/bitnet.cpp
       - ./data/lilevy:/data
     restart: unless-stopped
     networks:

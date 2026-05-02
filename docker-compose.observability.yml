@@ -1,0 +1,17 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: evy-otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "${EVY_OTEL_OTLP_GRPC_PORT:-4317}:4317"
+      - "${EVY_OTEL_OTLP_HTTP_PORT:-4318}:4318"
+      - "${EVY_OTEL_PROM_PORT:-9464}:9464"
+    volumes:
+      - ./monitoring/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./logs/otel:/logs/otel
+    restart: unless-stopped
+
+networks:
+  default:
+    name: evy-network

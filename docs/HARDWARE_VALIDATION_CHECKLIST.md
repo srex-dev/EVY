@@ -10,6 +10,20 @@ This checklist is for post-software validation on edge hardware. Run tests in or
 4. Power telemetry
 5. Integrated node checks
 
+Suite command and standard report:
+
+```bash
+python scripts/test_edge_hardware_suite.py \
+  --gsm-device /dev/ttyUSB0 \
+  --gps-device /dev/ttyAMA0 \
+  --lora-frequency 915.0 \
+  --power-telemetry /data/telemetry/power.json
+```
+
+Default suite artifact:
+
+- `data/lilevy/software_reports/hardware_validation_report.json`
+
 ## 1) GSM Modem Validation
 
 - [ ] Confirm device paths exist (`/dev/ttyUSB0` and `/dev/ttyUSB1` when GNSS is enabled)

@@ -17,11 +17,11 @@ class APIGateway:
     
     def __init__(self):
         self.services = {
-            "sms-gateway": f"http://localhost:{settings.sms_gateway_port}",
-            "message-router": f"http://localhost:{settings.message_router_port}",
-            "llm-inference": f"http://localhost:{settings.llm_inference_port}",
-            "rag-service": f"http://localhost:{settings.rag_service_port}",
-            "privacy-filter": f"http://localhost:{settings.privacy_filter_port}",
+            "sms-gateway": settings.sms_gateway_url,
+            "message-router": settings.message_router_url,
+            "llm-inference": settings.llm_inference_url,
+            "rag-service": settings.rag_service_url,
+            "privacy-filter": settings.privacy_filter_url,
         }
     
     async def check_all_services(self) -> Dict[str, Dict]:

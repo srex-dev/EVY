@@ -1,143 +1,169 @@
 #!/bin/bash
 
-# lilEVY Deployment Script
-# Deploys edge SMS node optimized for Raspberry Pi 4 + GSM HAT
+# lilEVY deployment script.
+# Starts the core edge SMS profile defined in docker-compose.lilevy.yml.
 
-set -e
+set -euo pipefail
 
-echo "🚀 Deploying lilEVY Edge SMS Node..."
-
-# Check if running on supported hardware
-if [[ $(uname -m) != "aarch64" && $(uname -m) != "armv7l" ]]; then
-    echo "⚠️  Warning: This script is optimized for ARM-based systems (Raspberry Pi)"
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+else
+    echo "Docker Compose is required. Install Docker Compose v2 or docker-compose v1."
+    exit 1
 fi
 
-# Create necessary directories
-echo "📁 Creating directories..."
-mkdir -p data/lilevy/{knowledge,chroma,privacy,metrics}
-mkdir -p models/tiny
-mkdir -p data/lilevy/models/embedding_cache
-mkdir -p data/lilevy/telemetry
-mkdir -p logs
+: "${NODE_ID:=lilevy-001}"
+: "${GSM_DEVICE:=/dev/ttyUSB0}"
+: "${GSM_BAUD_RATE:=115200}"
+: "${DEFAULT_MODEL:=bitnet-b1.58-2B-4T}"
+: "${LLM_PROVIDER:=bitnet}"
+: "${BITNET_MODEL:=bitnet-b1.58-2B-4T}"
+: "${BITNET_CPP_DIR:=/opt/bitnet.cpp}"
+: "${BITNET_MODEL_PATH:=/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf}"
+: "${BITNET_THREADS:=2}"
+: "${BITNET_CONTEXT_TOKENS:=512}"
+: "${BITNET_N_PREDICT:=80}"
+: "${BITNET_ALLOW_FALLBACK:=false}"
+: "${LLM_AUTO_PULL_MODELS:=false}"
+: "${MAX_SMS_PER_MINUTE:=10}"
+: "${MAX_SMS_PER_HOUR:=100}"
+: "${RAG_MIN_SIMILARITY:=0.5}"
+: "${LILEVY_API_PORT:=18080}"
+: "${LILEVY_SMS_PORT:=18000}"
+: "${LILEVY_ROUTER_PORT:=18001}"
+: "${LILEVY_LLM_PORT:=18002}"
+: "${LILEVY_RAG_PORT:=18003}"
+: "${LILEVY_PRIVACY_PORT:=18004}"
 
-# Set permissions for GSM device access
-if [ -e /dev/ttyUSB0 ]; then
-    echo "📱 Configuring GSM device permissions..."
-    sudo chmod 666 /dev/ttyUSB0
-    sudo usermod -a -G dialout $USER
+export NODE_ID GSM_DEVICE GSM_BAUD_RATE DEFAULT_MODEL LLM_PROVIDER
+export BITNET_MODEL BITNET_CPP_DIR BITNET_MODEL_PATH BITNET_THREADS
+export BITNET_CONTEXT_TOKENS BITNET_N_PREDICT BITNET_ALLOW_FALLBACK
+export LLM_AUTO_PULL_MODELS
+export MAX_SMS_PER_MINUTE MAX_SMS_PER_HOUR RAG_MIN_SIMILARITY
+export LILEVY_API_PORT LILEVY_SMS_PORT LILEVY_ROUTER_PORT
+export LILEVY_LLM_PORT LILEVY_RAG_PORT LILEVY_PRIVACY_PORT
+
+echo "Deploying lilEVY core edge profile..."
+
+if [[ "$(uname -m)" != "aarch64" && "$(uname -m)" != "armv7l" ]]; then
+    echo "Warning: lilEVY is intended for ARM edge hardware; continuing on $(uname -m)."
 fi
-if [ -e /dev/ttyUSB1 ]; then
-    sudo chmod 666 /dev/ttyUSB1 || true
+
+echo "Creating runtime directories..."
+mkdir -p data/lilevy/{knowledge,chroma,privacy,metrics,models/embedding_cache,telemetry}
+mkdir -p models/tiny models/bitnet third_party logs
+
+if [[ -e "$GSM_DEVICE" ]]; then
+    echo "Configuring GSM device permissions for $GSM_DEVICE..."
+    sudo chmod 666 "$GSM_DEVICE" || true
+    sudo usermod -a -G dialout "$USER" || true
+else
+    echo "GSM device $GSM_DEVICE was not found. SMS hardware access will wait for a local override/device."
 fi
-if [ -e /dev/spidev0.0 ]; then
+
+if [[ -e /dev/spidev0.0 ]]; then
     sudo chmod 666 /dev/spidev0.0 || true
 fi
 
-# Create environment file
-echo "⚙️  Creating environment configuration..."
-cat > .env.lilevy << EOF
-# lilEVY Configuration
-NODE_TYPE=lilevy
-NODE_ID=lilevy-001
-GSM_DEVICE=/dev/ttyUSB0
-GSM_BAUD_RATE=115200
-LOG_LEVEL=INFO
-
-# Model Configuration
-DEFAULT_MODEL=tinyllama
-BITNET_MODEL=bitnet-2b
-LLM_PROVIDER=ollama
-MAX_TOKENS=512
-RESPONSE_TIME_TARGET=10
-
-# RAG Configuration
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-EMBEDDING_CACHE_DIR=/data/models/embedding_cache
-RAG_MIN_SIMILARITY=0.5
-MAX_DOCUMENTS=10000
-CACHE_SIZE_MB=500
-
-# Privacy Configuration
-MAX_SMS_PER_MINUTE=10
-MAX_SMS_PER_HOUR=100
-
-# Network Configuration
-PEER_DISCOVERY=true
-MESH_NETWORK=true
-SYNC_INTERVAL_HOURS=24
-LORA_FREQUENCY_MHZ=915.0
-LORA_CS_PIN=25
-LORA_DIO0_PIN=4
-LORA_RESET_PIN=17
-DEPLOYMENT_REGION=us
-EOF
-
-echo "🧰 Applying Raspberry Pi runtime prerequisites..."
 if command -v raspi-config >/dev/null 2>&1; then
+    echo "Enabling Raspberry Pi SPI interface..."
     sudo raspi-config nonint do_spi 0 || true
 fi
 
-# Pull or build images
-echo "🐳 Building lilEVY Docker images..."
-docker-compose -f docker-compose.lilevy.yml -f docker-compose.override.yml build
+echo "Writing .env.lilevy..."
+cat > .env.lilevy << EOF
+NODE_TYPE=lilevy
+NODE_ID=${NODE_ID}
+GSM_DEVICE=${GSM_DEVICE}
+GSM_BAUD_RATE=${GSM_BAUD_RATE}
+LOG_LEVEL=INFO
+DEFAULT_MODEL=${DEFAULT_MODEL}
+LLM_PROVIDER=${LLM_PROVIDER}
+BITNET_MODEL=${BITNET_MODEL}
+BITNET_CPP_DIR=${BITNET_CPP_DIR}
+BITNET_MODEL_PATH=${BITNET_MODEL_PATH}
+BITNET_THREADS=${BITNET_THREADS}
+BITNET_CONTEXT_TOKENS=${BITNET_CONTEXT_TOKENS}
+BITNET_N_PREDICT=${BITNET_N_PREDICT}
+BITNET_ALLOW_FALLBACK=${BITNET_ALLOW_FALLBACK}
+LLM_AUTO_PULL_MODELS=${LLM_AUTO_PULL_MODELS}
+MAX_SMS_PER_MINUTE=${MAX_SMS_PER_MINUTE}
+MAX_SMS_PER_HOUR=${MAX_SMS_PER_HOUR}
+RAG_MIN_SIMILARITY=${RAG_MIN_SIMILARITY}
+LILEVY_API_PORT=${LILEVY_API_PORT}
+LILEVY_SMS_PORT=${LILEVY_SMS_PORT}
+LILEVY_ROUTER_PORT=${LILEVY_ROUTER_PORT}
+LILEVY_LLM_PORT=${LILEVY_LLM_PORT}
+LILEVY_RAG_PORT=${LILEVY_RAG_PORT}
+LILEVY_PRIVACY_PORT=${LILEVY_PRIVACY_PORT}
+EOF
 
-# Optional: ensure local model is available in Ollama if installed
-if command -v ollama >/dev/null 2>&1; then
-    echo "🧠 Ensuring local tiny model is available..."
-    ollama pull "${DEFAULT_MODEL}" || true
+COMPOSE_FILES=(-f docker-compose.lilevy.yml)
+if [[ -f docker-compose.override.yml ]]; then
+    COMPOSE_FILES+=(-f docker-compose.override.yml)
 fi
 
-# Start services
-echo "🔄 Starting lilEVY services..."
-docker-compose -f docker-compose.lilevy.yml -f docker-compose.override.yml up -d
+if [[ "$LLM_PROVIDER" != "bitnet" ]] && command -v ollama >/dev/null 2>&1; then
+    echo "Ensuring local model is available in Ollama: ${DEFAULT_MODEL}"
+    ollama pull "${DEFAULT_MODEL}" || true
+elif [[ "$LLM_PROVIDER" == "bitnet" ]]; then
+    echo "Using BitNet local LLM. Run scripts/setup_bitnet_cpp.sh before hardware field testing."
+fi
 
-# Wait for services to be ready
-echo "⏳ Waiting for services to start..."
-sleep 30
+echo "Building lilEVY images..."
+"${COMPOSE_CMD[@]}" --env-file .env.lilevy "${COMPOSE_FILES[@]}" build
 
-# Health check
-echo "🏥 Performing health checks..."
+echo "Starting lilEVY services..."
+"${COMPOSE_CMD[@]}" --env-file .env.lilevy "${COMPOSE_FILES[@]}" up -d
+
+echo "Checking service health..."
 declare -A SERVICE_PORTS=(
-    ["sms-gateway"]=8000
-    ["message-router"]=8001
-    ["tiny-llm"]=8002
-    ["local-rag"]=8003
-    ["privacy-filter"]=8004
+    ["api-gateway"]="${LILEVY_API_PORT}"
+    ["sms-gateway"]="${LILEVY_SMS_PORT}"
+    ["message-router"]="${LILEVY_ROUTER_PORT}"
+    ["tiny-llm"]="${LILEVY_LLM_PORT}"
+    ["local-rag"]="${LILEVY_RAG_PORT}"
+    ["privacy-filter"]="${LILEVY_PRIVACY_PORT}"
 )
 
 for service in "${!SERVICE_PORTS[@]}"; do
     port="${SERVICE_PORTS[$service]}"
-    if curl -f "http://localhost:${port}/health" > /dev/null 2>&1; then
-        echo "✅ $service is healthy on ${port}"
+    ok=false
+    for _ in {1..30}; do
+        if curl -fsS "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
+            ok=true
+            break
+        fi
+        sleep 2
+    done
+    if [[ "$ok" == "true" ]]; then
+        echo "OK: $service is healthy on port $port"
     else
-        echo "❌ $service health check failed on ${port}"
+        echo "ERROR: $service did not become healthy on port $port"
+        "${COMPOSE_CMD[@]}" --env-file .env.lilevy "${COMPOSE_FILES[@]}" ps
+        exit 1
     fi
 done
 
-# Display status
-echo "📊 lilEVY Deployment Status:"
-docker-compose -f docker-compose.lilevy.yml ps
+echo "lilEVY deployment status:"
+"${COMPOSE_CMD[@]}" --env-file .env.lilevy "${COMPOSE_FILES[@]}" ps
 
-echo ""
-echo "🎉 lilEVY deployment completed!"
-echo ""
-echo "📋 Service URLs:"
-echo "  SMS Gateway:     http://localhost:8000"
-echo "  Message Router:  http://localhost:8001"
-echo "  Tiny LLM:        http://localhost:8002"
-echo "  Local RAG:       http://localhost:8003"
-echo "  Privacy Filter:  http://localhost:8004"
-echo "  Communication:   http://localhost:8005"
-echo "  Monitoring:      http://localhost:9090"
-echo ""
-echo "📱 SMS Configuration:"
-echo "  Device:          /dev/ttyUSB0"
-echo "  Baud Rate:       115200"
-echo "  Power:           Solar + Battery"
-echo ""
-echo "🔧 Management Commands:"
-echo "  View logs:       docker-compose -f docker-compose.lilevy.yml logs -f"
-echo "  Stop services:   docker-compose -f docker-compose.lilevy.yml down"
-echo "  Restart:         docker-compose -f docker-compose.lilevy.yml restart"
-echo ""
-echo "📖 For more information, see README.md"
+cat << EOF
+
+lilEVY deployment completed.
+
+Service URLs:
+  API Gateway:     http://127.0.0.1:${LILEVY_API_PORT}
+  SMS Gateway:     http://127.0.0.1:${LILEVY_SMS_PORT}
+  Message Router:  http://127.0.0.1:${LILEVY_ROUTER_PORT}
+  Tiny LLM:        http://127.0.0.1:${LILEVY_LLM_PORT}
+  Local RAG:       http://127.0.0.1:${LILEVY_RAG_PORT}
+  Privacy Filter:  http://127.0.0.1:${LILEVY_PRIVACY_PORT}
+
+Management:
+  Logs:    ${COMPOSE_CMD[*]} --env-file .env.lilevy ${COMPOSE_FILES[*]} logs -f
+  Stop:    ${COMPOSE_CMD[*]} --env-file .env.lilevy ${COMPOSE_FILES[*]} down
+  Restart: ${COMPOSE_CMD[*]} --env-file .env.lilevy ${COMPOSE_FILES[*]} restart
+EOF

@@ -7,6 +7,10 @@ edition = "2021"
 name = "evy_message_router"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+python = []
+
 [dependencies]
 # Regex for pattern matching
 regex = "1.10"
@@ -27,6 +31,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+chrono = "0.4"
 
 # LRU cache
 lru = "0.12"

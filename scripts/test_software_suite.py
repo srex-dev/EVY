@@ -33,13 +33,23 @@ def build_stage_commands(stage: str) -> List[Dict[str, List[str]]]:
             {"name": "router_import_smoke", "cmd": [sys.executable, "-c", "import backend.services.message_router.main; print('ok')"]},
         ],
         "regression": [
+            {"name": "bitnet_sms_benchmark_tests", "cmd": pytest + ["backend/tests/test_bitnet_sms_benchmark.py", "-q"]},
+            {"name": "bitnet_validation_script_tests", "cmd": pytest + ["backend/tests/test_bitnet_validation_script.py", "-q"]},
+            {"name": "hardware_suite_report_tests", "cmd": pytest + ["backend/tests/test_hardware_suite_report.py", "-q"]},
+            {"name": "knowledge_pack_tests", "cmd": pytest + ["backend/tests/test_knowledge_pack.py", "-q"]},
+            {"name": "knowledge_pack_script_tests", "cmd": pytest + ["backend/tests/test_knowledge_pack_script.py", "-q"]},
             {"name": "llm_inference_tests", "cmd": pytest + ["backend/tests/test_llm_inference.py", "-q"]},
+            {"name": "llm_rag_tuning_script_tests", "cmd": pytest + ["backend/tests/test_llm_rag_tuning_script.py", "-q"]},
+            {"name": "observability_boot_tests", "cmd": pytest + ["backend/tests/test_observability_and_boot.py", "-q"]},
+            {"name": "observability_profile_tests", "cmd": pytest + ["backend/tests/test_observability_profile.py", "-q"]},
             {"name": "router_enhancement_tests", "cmd": pytest + ["backend/tests/test_message_router_enhancements.py", "-q"]},
             {"name": "routing_model_tests", "cmd": pytest + ["backend/tests/test_routing_and_models.py", "-q"]},
             {"name": "sms_gateway_tests", "cmd": pytest + ["backend/tests/test_sms_gateway.py", "-q"]},
+            {"name": "sqlite_rag_store_tests", "cmd": pytest + ["backend/tests/test_sqlite_rag_store.py", "-q"]},
         ],
         "integration": [
             {"name": "integration_tests", "cmd": pytest + ["backend/tests/test_integration.py", "-q"]},
+            {"name": "pre_hardware_smoke", "cmd": [sys.executable, "scripts/pre_hardware_smoke.py", "--timeout", "30"]},
         ],
         "performance": [
             {"name": "integration_performance_subset", "cmd": pytest + ["backend/tests/test_integration.py::TestPerformanceIntegration", "-q"]},
@@ -68,11 +78,21 @@ def evaluate_release_gates(results: List[Dict]) -> Dict:
         gates.append({"gate": gate_id, "pass": passed, "detail": detail})
 
     required = [
+        "bitnet_sms_benchmark_tests",
+        "bitnet_validation_script_tests",
+        "hardware_suite_report_tests",
+        "knowledge_pack_tests",
+        "knowledge_pack_script_tests",
         "llm_inference_tests",
+        "llm_rag_tuning_script_tests",
+        "observability_boot_tests",
+        "observability_profile_tests",
         "router_enhancement_tests",
         "routing_model_tests",
         "sms_gateway_tests",
+        "sqlite_rag_store_tests",
         "integration_tests",
+        "pre_hardware_smoke",
     ]
     for name in required:
         item = by_name.get(name)

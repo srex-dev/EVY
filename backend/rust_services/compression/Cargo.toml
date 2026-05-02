@@ -7,6 +7,10 @@ edition = "2021"
 name = "evy_compression"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+python = []
+
 [dependencies]
 # Regex for pattern matching
 regex = "1.10"

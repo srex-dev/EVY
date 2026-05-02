@@ -4,10 +4,8 @@
 
 use crate::config::GatewayConfig;
 use crate::error::{GatewayError, Result};
-use crate::gsm_driver::{GSMDriver, ReceivedSMS, SerialGSMDriver};
-use crate::message_queue::{MessagePriority, SMSMessageQueue, QueuedMessage};
-use async_trait::async_trait;
-use chrono::Utc;
+use crate::gsm_driver::{GSMDriver, SerialGSMDriver};
+use crate::message_queue::{MessagePriority, SMSMessageQueue};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
@@ -88,6 +86,7 @@ impl SMSGateway {
         // Initialize GSM driver
         let mut driver = self.driver.write().await;
         driver.initialize().await?;
+        drop(driver);
         
         // Check power level
         let power = self.power_monitor.read().await;

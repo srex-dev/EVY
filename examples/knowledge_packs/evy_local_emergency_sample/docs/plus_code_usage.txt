@@ -1,0 +1,3 @@
+Plus Code guidance:
+
+When an SMS includes a Plus Code such as 86HVCWC8+R9, EVY preserves it as location metadata. Operators can use the code to route nearby shelter, water, medical, or transport information when street addresses are missing or unreliable.

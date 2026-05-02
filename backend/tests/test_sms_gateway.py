@@ -148,6 +148,19 @@ class TestMessageParser:
         parsed = parser.parse_message(message, "+1234567890")
         
         assert 'test@example.com' in parsed.entities['emails']
+
+    def test_extract_plus_code_location_metadata(self, parser):
+        """Plus Codes should survive parsing as normalized location metadata."""
+        message = "Need shelter near 86HVCWC8+R9"
+        parsed = parser.parse_message(message, "+1234567890")
+
+        assert parsed.entities["plus_codes"] == ["86HVCWC8+R9"]
+        assert parsed.entities["location"] == {
+            "plus_code": "86HVCWC8+R9",
+            "normalized": "86HVCWC8+R9",
+            "source": "sms_plus_code",
+        }
+        assert "86HVCWC8+R9" in parsed.entities["locations"]
     
     def test_validate_message_valid(self, parser):
         """Test valid message validation."""
@@ -212,6 +225,53 @@ class TestMessageQueue:
         assert message_id.startswith("sms_")
         mock_redis.hset.assert_called()
         mock_redis.zadd.assert_called()
+
+    def test_queued_message_serializes_none_values_for_redis(self):
+        """Redis hset mappings cannot contain None values."""
+        from backend.services.sms_gateway.message_queue import QueuedMessage, MessageStatus, MessagePriority
+
+        message = QueuedMessage(
+            id="test_id",
+            phone_number="+1234567890",
+            content="Test message",
+            priority=MessagePriority.NORMAL,
+            status=MessageStatus.PENDING,
+            created_at=datetime.utcnow(),
+            metadata=None,
+        )
+
+        serialized = message.to_dict()
+
+        assert all(value is not None for value in serialized.values())
+        assert serialized["metadata"] == "{}"
+        assert serialized["next_retry"] == ""
+
+        restored = QueuedMessage.from_dict(serialized)
+
+        assert restored.metadata == {}
+        assert restored.next_retry is None
+        assert restored.priority == MessagePriority.NORMAL
+        assert restored.status == MessageStatus.PENDING
+
+    def test_queued_message_serializes_nested_datetime_metadata(self):
+        """Nested metadata can include original SMS timestamps."""
+        from backend.services.sms_gateway.message_queue import QueuedMessage, MessageStatus, MessagePriority
+
+        now = datetime.utcnow()
+        message = QueuedMessage(
+            id="test_id",
+            phone_number="+1234567890",
+            content="Test message",
+            priority=MessagePriority.NORMAL,
+            status=MessageStatus.PENDING,
+            created_at=now,
+            metadata={"original_message": {"timestamp": now}},
+        )
+
+        serialized = message.to_dict()
+        restored = QueuedMessage.from_dict(serialized)
+
+        assert restored.metadata["original_message"]["timestamp"] == now.isoformat()
     
     @pytest.mark.asyncio
     async def test_dequeue_message(self, message_queue, mock_redis):

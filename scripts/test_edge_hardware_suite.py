@@ -5,6 +5,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -20,15 +21,17 @@ def run_step(name: str, cmd: list[str]) -> dict:
     }
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run full edge hardware validation suite.")
-    parser.add_argument("--report", default="data/lilevy/hardware_reports/hardware_suite_report.json")
+    parser.add_argument("--report", default="data/lilevy/software_reports/hardware_validation_report.json")
     parser.add_argument("--gsm-device", default="/dev/ttyUSB0")
     parser.add_argument("--gps-device", default="/dev/ttyAMA0")
     parser.add_argument("--lora-frequency", default="915.0")
     parser.add_argument("--power-telemetry", default="/data/telemetry/power.json")
-    args = parser.parse_args()
+    return parser.parse_args(argv)
 
+
+def build_report(args: argparse.Namespace, runner=run_step) -> dict:
     steps = [
         (
             "gsm",
@@ -48,14 +51,31 @@ def main() -> int:
         ),
     ]
 
-    results = [run_step(name, cmd) for name, cmd in steps]
+    results = [runner(name, cmd) for name, cmd in steps]
     suite_pass = all(item["pass"] for item in results)
 
-    report = {
+    return {
         "test": "edge_hardware_suite",
+        "timestamp": time.time(),
+        "hardware_profile": {
+            "gsm_device": args.gsm_device,
+            "gps_device": args.gps_device,
+            "lora_frequency": args.lora_frequency,
+            "power_telemetry": args.power_telemetry,
+        },
+        "simulation_visible": {
+            "hardware_suite_executed": True,
+            "hardware_required": True,
+            "missing_or_failed_steps": [item["name"] for item in results if not item["pass"]],
+        },
         "pass": suite_pass,
         "results": results,
     }
+
+
+def main() -> int:
+    args = parse_args()
+    report = build_report(args)
 
     report_path = Path(args.report)
     report_path.parent.mkdir(parents=True, exist_ok=True)

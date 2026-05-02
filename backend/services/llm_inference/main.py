@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from backend.shared.models import LLMRequest, LLMResponse, ServiceHealth
 from backend.shared.config import settings
 from backend.shared.logging import setup_logger
+from backend.services.llm_inference.bitnet_cpp_manager import BitNetCppManager
 from backend.services.llm_inference.tiny_model_manager import TinyModelManager
 
 logger = setup_logger("llm-inference")
@@ -20,6 +21,7 @@ class LLMInferenceEngine:
     def __init__(self):
         self.provider = settings.llm_provider
         self.openai_client = None
+        self.bitnet_manager = BitNetCppManager()
         self.tiny_model_manager = TinyModelManager()
         
         if self.provider == "openai":
@@ -30,7 +32,6 @@ class LLMInferenceEngine:
                 self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
                 logger.info("OpenAI client initialized")
         elif self.provider == "bitnet":
-            # Route bitnet provider through local manager/ollama.
             self.provider = "bitnet"
         
         # SMS-specific system prompt
@@ -44,7 +45,7 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
         try:
             logger.info("Initializing LLM Inference Engine...")
             
-            # Initialize tiny model manager
+            # Initialize local fallback manager without automatic downloads.
             if not await self.tiny_model_manager.initialize():
                 logger.warning("Failed to initialize tiny model manager")
             
@@ -52,7 +53,7 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
             if self.provider == "tiny":
                 await self.tiny_model_manager.load_model(settings.tiny_model)
             elif self.provider == "bitnet":
-                await self.tiny_model_manager.load_model(settings.bitnet_model)
+                await self.bitnet_manager.initialize()
             
             logger.info(f"LLM Inference Engine initialized with provider: {self.provider}")
             return True
@@ -196,11 +197,10 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
             )
 
     async def _generate_bitnet(self, request: LLMRequest, start_time: float) -> LLMResponse:
-        """Generate response using BitNet local model backend."""
+        """Generate response using the native BitNet local backend."""
         try:
-            result = await self.tiny_model_manager.generate_response(
+            result = await self.bitnet_manager.generate_response(
                 prompt=request.prompt,
-                model_name=request.model or settings.bitnet_model,
                 max_length=request.max_length,
                 temperature=request.temperature,
                 context=request.context
@@ -210,11 +210,23 @@ If the query is too complex for a short answer, suggest simplifying or breaking 
                 model_used=result["model_used"],
                 tokens_used=result["tokens_used"],
                 processing_time=time.time() - start_time,
-                metadata={"provider": "bitnet"}
+                metadata={
+                    "provider": "bitnet.cpp",
+                    "runtime": result.get("runtime"),
+                    "model_path": result.get("model_path"),
+                }
             )
         except Exception as e:
             logger.error(f"BitNet generation error: {e}")
-            return await self._generate_tiny(request, start_time)
+            if settings.bitnet_allow_fallback:
+                return await self._generate_tiny(request, start_time)
+            return LLMResponse(
+                response="Local BitNet model is not installed yet. Run the BitNet setup before field testing.",
+                model_used=settings.bitnet_model,
+                tokens_used=0,
+                processing_time=time.time() - start_time,
+                metadata={"provider": "bitnet.cpp", "error": str(e)}
+            )
 
 
 # Global engine instance
@@ -266,6 +278,7 @@ async def health_check():
         details={
             "provider": llm_engine.provider,
             "model": settings.default_model,
+            "bitnet": llm_engine.bitnet_manager.get_status(),
             "tiny_models": model_status,
             "edge_limits": {
                 "llm_request_timeout_seconds": settings.llm_request_timeout_seconds,
@@ -296,8 +309,9 @@ async def list_models():
     return {
         "provider": llm_engine.provider,
         "openai_models": [settings.default_model, settings.tiny_model],
+        "bitnet_model": llm_engine.bitnet_manager.get_status(),
         "tiny_models": available_models,
-        "current_model": settings.default_model if llm_engine.provider == "openai" else "tinyllama"
+        "current_model": settings.default_model if llm_engine.provider in {"openai", "bitnet"} else settings.tiny_model
     }
 
 
@@ -348,7 +362,9 @@ async def switch_provider(provider: Optional[str] = None, payload: Optional[Dict
         llm_engine.provider = provider
         
         # Initialize provider-specific resources
-        if provider == "tiny" and not await llm_engine.tiny_model_manager.load_model("tinyllama"):
+        if provider == "bitnet":
+            await llm_engine.bitnet_manager.initialize()
+        elif provider == "tiny" and not await llm_engine.tiny_model_manager.load_model(settings.tiny_model):
             logger.warning("Failed to load default tiny model")
         
         return {

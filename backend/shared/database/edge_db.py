@@ -145,6 +145,7 @@ class EdgeDatabase:
         """Get database connection with proper cleanup"""
         conn = sqlite3.connect(self.db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row  # Enable dict-like access
+        conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
         try:
             yield conn
         finally:
@@ -241,13 +242,15 @@ class EdgeDatabase:
             return 0  # ID will be assigned on commit
         else:
             with self._get_connection() as conn:
-                return self._insert_message_direct(conn, {
+                row_id = self._insert_message_direct(conn, {
                     'phone_number': phone_number,
                     'content': content,
                     'response': response,
                     'timestamp': timestamp,
                     'priority': priority,
                 })
+                conn.commit()
+                return row_id
     
     def _insert_message_direct(self, conn: sqlite3.Connection, data: Dict[str, Any]) -> int:
         """Direct message insert (for batch operations)"""
@@ -288,11 +291,13 @@ class EdgeDatabase:
             return 0
         else:
             with self._get_connection() as conn:
-                return self._insert_analytics_direct(conn, {
+                row_id = self._insert_analytics_direct(conn, {
                     'metric': metric,
                     'value': value,
                     'timestamp': timestamp,
                 })
+                conn.commit()
+                return row_id
     
     def _insert_analytics_direct(self, conn: sqlite3.Connection, data: Dict[str, Any]) -> int:
         """Direct analytics insert"""
@@ -334,12 +339,14 @@ class EdgeDatabase:
             return 0
         else:
             with self._get_connection() as conn:
-                return self._insert_emergency_direct(conn, {
+                row_id = self._insert_emergency_direct(conn, {
                     'phone_number': phone_number,
                     'message': message,
                     'response': response,
                     'timestamp': timestamp,
                 })
+                conn.commit()
+                return row_id
     
     def _insert_emergency_direct(self, conn: sqlite3.Connection, data: Dict[str, Any]) -> int:
         """Direct emergency log insert"""

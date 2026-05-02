@@ -49,6 +49,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Rust
+target/
+
 # Build
 dist/
 build/
@@ -66,8 +69,12 @@ logs/
 # Data
 data/
 chroma/
+models/
 *.h5
 *.pkl
+
+# Local model runtimes
+third_party/BitNet/
 
 # Docker
 docker-compose.override.yml

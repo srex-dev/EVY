@@ -1,10 +1,12 @@
 """Shared configuration settings for all EVY services."""
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
     
     # Environment
     env: str = "development"
@@ -19,14 +21,24 @@ class Settings(BaseSettings):
     api_gateway_port: int = 8000
     
     # LLM Configuration
-    llm_provider: str = "ollama"  # openai, ollama, tiny, or bitnet
+    llm_provider: str = "bitnet"  # bitnet, openai, ollama, or tiny
     openai_api_key: Optional[str] = None
     ollama_base_url: str = "http://host.docker.internal:11434"
+    llm_auto_pull_models: bool = False
     
     # Model Configuration
-    default_model: str = "tinyllama"
+    default_model: str = "bitnet-b1.58-2B-4T"
     tiny_model: str = "tinyllama"
-    bitnet_model: str = "bitnet-2b"
+    bitnet_model: str = "bitnet-b1.58-2B-4T"
+    bitnet_cpp_dir: str = "/opt/bitnet.cpp"
+    bitnet_model_path: str = "/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf"
+    bitnet_run_script: Optional[str] = None
+    bitnet_python_executable: Optional[str] = None
+    bitnet_threads: int = 2
+    bitnet_context_tokens: int = 512
+    bitnet_n_predict: int = 80
+    bitnet_chat_mode: bool = True
+    bitnet_allow_fallback: bool = False
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_cache_dir: str = "/data/models/embedding_cache"
     rag_min_similarity: float = 0.5
@@ -36,6 +48,10 @@ class Settings(BaseSettings):
     
     # Vector Database
     chroma_persist_dir: str = "/data/chroma"
+    rag_backend: str = "chroma"  # chroma or sqlite
+    sqlite_rag_enabled: bool = False
+    sqlite_rag_db_path: str = "/data/lilevy/sqlite_rag.db"
+    knowledge_pack_require_signature: bool = False
     
     # SMS Configuration
     sms_device: str = "/dev/ttyUSB0"
@@ -88,10 +104,6 @@ class Settings(BaseSettings):
     prometheus_port: int = 9090
     grafana_port: int = 3001
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-
 
 # Global settings instance
 settings = Settings()

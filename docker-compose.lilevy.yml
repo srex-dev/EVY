@@ -1,68 +1,27 @@
-# lilEVY Deployment Configuration
-# Edge SMS Node - Raspberry Pi 4 + GSM HAT + Solar Power
-version: '3.8'
-
+# lilEVY core service profile.
+#
+# This file uses real Python service entrypoints and intentionally omits
+# hardware device mounts. Add a local override for /dev/ttyUSB*, /dev/spidev*,
+# GPIO, and power telemetry once the target HATs are confirmed.
 services:
-  # lilEVY Core Services
-  sms-gateway:
+  api-gateway:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-sms-gateway
-    ports:
-      - "8000:8000"
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.api_gateway.main:app --host 0.0.0.0 --port 8080
     environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - GSM_DEVICE=/dev/ttyUSB0
-      - GSM_BAUD_RATE=115200
-      - LOG_LEVEL=INFO
-      - LLM_PROVIDER=ollama
-      - DEFAULT_MODEL=tinyllama
-      - MESSAGE_ROUTER_URL=http://message-router:8001
-      - SMS_INBOUND_QUEUE_MAXSIZE=500
-      - SMS_OUTBOUND_QUEUE_MAXSIZE=1000
-      - SMS_FORWARD_MAX_RETRIES=3
-      - SMS_ROUTER_TIMEOUT_SECONDS=15
-    volumes:
-      - ./data/lilevy:/data
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0
-      - /dev/ttyUSB1:/dev/ttyUSB1
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - lilevy-network
-    cpus: 1.0
-    mem_limit: 512m
-
-  message-router:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-message-router
-    ports:
-      - "8001:8001"
-    environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
+      - API_GATEWAY_PORT=8080
       - SMS_GATEWAY_URL=http://sms-gateway:8000
-      - LLM_SERVICE_URL=http://tiny-llm:8002
+      - MESSAGE_ROUTER_URL=http://message-router:8001
+      - LLM_INFERENCE_URL=http://tiny-llm:8002
       - RAG_SERVICE_URL=http://local-rag:8003
       - PRIVACY_FILTER_URL=http://privacy-filter:8004
-      - SMS_GATEWAY_URL=http://sms-gateway:8000
-      - LLM_MAX_INFLIGHT_REQUESTS=2
-      - LLM_REQUEST_TIMEOUT_SECONDS=20
-      - LOG_LEVEL=INFO
-      - LLM_PROVIDER=ollama
-      - DEFAULT_MODEL=tinyllama
+    ports:
+      - "${LILEVY_API_PORT:-18080}:8080"
     depends_on:
       sms-gateway:
+        condition: service_healthy
+      message-router:
         condition: service_healthy
       tiny-llm:
         condition: service_healthy
@@ -70,181 +29,149 @@ services:
         condition: service_healthy
       privacy-filter:
         condition: service_healthy
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  sms-gateway:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.services.sms_gateway.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - SMS_GATEWAY_PORT=8000
+      - MESSAGE_ROUTER_URL=http://message-router:8001
+      - GSM_DEVICE=${GSM_DEVICE:-/dev/ttyUSB0}
+      - GSM_BAUD_RATE=${GSM_BAUD_RATE:-115200}
+      - SMS_FORWARD_MAX_RETRIES=${SMS_FORWARD_MAX_RETRIES:-3}
+      - SMS_ROUTER_TIMEOUT_SECONDS=${SMS_ROUTER_TIMEOUT_SECONDS:-15}
+    ports:
+      - "${LILEVY_SMS_PORT:-18000}:8000"
+    volumes:
+      - ./data/lilevy:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 25s
-    networks:
-      - lilevy-network
-    cpus: 1.0
-    mem_limit: 512m
+    restart: unless-stopped
+
+  message-router:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.services.message_router.main:app --host 0.0.0.0 --port 8001
+    environment:
+      - MESSAGE_ROUTER_PORT=8001
+      - SMS_GATEWAY_URL=http://sms-gateway:8000
+      - LLM_SERVICE_URL=http://tiny-llm:8002
+      - RAG_SERVICE_URL=http://local-rag:8003
+      - PRIVACY_FILTER_URL=http://privacy-filter:8004
+      - LLM_MAX_INFLIGHT_REQUESTS=${LLM_MAX_INFLIGHT_REQUESTS:-2}
+      - LLM_REQUEST_TIMEOUT_SECONDS=${LLM_REQUEST_TIMEOUT_SECONDS:-20}
+    ports:
+      - "${LILEVY_ROUTER_PORT:-18001}:8001"
+    depends_on:
+      tiny-llm:
+        condition: service_healthy
+      local-rag:
+        condition: service_healthy
+      privacy-filter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
 
   tiny-llm:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-tiny-llm
-    ports:
-      - "8002:8002"
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.services.llm_inference.main:app --host 0.0.0.0 --port 8002
     environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - MODEL_TYPE=tiny
-      - DEFAULT_MODEL=tinyllama
-      - BITNET_MODEL=bitnet-2b
-      - MAX_TOKENS=512
-      - RESPONSE_TIME_TARGET=10
-      - LOG_LEVEL=INFO
-      - LLM_PROVIDER=ollama
-      - LLM_MAX_INFLIGHT_REQUESTS=2
-      - LLM_MAX_LOADED_MODELS=2
-      - LLM_REQUEST_TIMEOUT_SECONDS=20
+      - LLM_INFERENCE_PORT=8002
+      - LLM_PROVIDER=${LLM_PROVIDER:-bitnet}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-bitnet-b1.58-2B-4T}
+      - BITNET_MODEL=${BITNET_MODEL:-bitnet-b1.58-2B-4T}
+      - BITNET_CPP_DIR=${BITNET_CPP_DIR:-/opt/bitnet.cpp}
+      - BITNET_MODEL_PATH=${BITNET_MODEL_PATH:-/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf}
+      - BITNET_THREADS=${BITNET_THREADS:-2}
+      - BITNET_CONTEXT_TOKENS=${BITNET_CONTEXT_TOKENS:-512}
+      - BITNET_N_PREDICT=${BITNET_N_PREDICT:-80}
+      - BITNET_ALLOW_FALLBACK=${BITNET_ALLOW_FALLBACK:-false}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LLM_AUTO_PULL_MODELS=${LLM_AUTO_PULL_MODELS:-false}
+      - LLM_MAX_LOADED_MODELS=${LLM_MAX_LOADED_MODELS:-2}
+    ports:
+      - "${LILEVY_LLM_PORT:-18002}:8002"
     volumes:
       - ./models/tiny:/models
+      - ./models/bitnet:/models/bitnet
+      - ./third_party/BitNet:/opt/bitnet.cpp
       - ./data/lilevy:/data
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=2).read()"]
       interval: 20s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    networks:
-      - lilevy-network
-    cpus: 2.0
-    mem_limit: 2g
+      start_period: 40s
+    restart: unless-stopped
 
   local-rag:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-local-rag
-    ports:
-      - "8003:8003"
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.services.rag_service.main:app --host 0.0.0.0 --port 8003
     environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - MAX_DOCUMENTS=10000
-      - CACHE_SIZE_MB=500
-      - LOG_LEVEL=INFO
+      - RAG_SERVICE_PORT=8003
+      - CHROMA_PERSIST_DIR=/data/chroma
       - EMBEDDING_CACHE_DIR=/data/models/embedding_cache
-      - RAG_MIN_SIMILARITY=0.5
-      - RAG_CHUNK_SIZE_CHARS=600
-      - RAG_CHUNK_OVERLAP_CHARS=120
+      - RAG_MIN_SIMILARITY=${RAG_MIN_SIMILARITY:-0.5}
+      - RAG_CHUNK_SIZE_CHARS=${RAG_CHUNK_SIZE_CHARS:-600}
+      - RAG_CHUNK_OVERLAP_CHARS=${RAG_CHUNK_OVERLAP_CHARS:-120}
+    ports:
+      - "${LILEVY_RAG_PORT:-18003}:8003"
     volumes:
       - ./data/lilevy/knowledge:/data/lilevy_knowledge
       - ./data/lilevy/chroma:/data/chroma
       - ./data/lilevy/models:/data/models
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health', timeout=2).read()"]
       interval: 20s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    networks:
-      - lilevy-network
-    cpus: 1.0
-    mem_limit: 1g
+      start_period: 40s
+    restart: unless-stopped
 
   privacy-filter:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-privacy-filter
-    ports:
-      - "8004:8004"
+      context: .
+      dockerfile: backend/Dockerfile.lilevy
+    command: python -m uvicorn backend.services.privacy_filter.main:app --host 0.0.0.0 --port 8004
     environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - MAX_SMS_PER_MINUTE=10
-      - MAX_SMS_PER_HOUR=100
-      - LOG_LEVEL=INFO
+      - PRIVACY_FILTER_PORT=8004
+      - MAX_SMS_PER_MINUTE=${MAX_SMS_PER_MINUTE:-10}
+      - MAX_SMS_PER_HOUR=${MAX_SMS_PER_HOUR:-100}
+    ports:
+      - "${LILEVY_PRIVACY_PORT:-18004}:8004"
     volumes:
       - ./data/lilevy/privacy:/data/privacy_filter
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health', timeout=2).read()"]
       interval: 20s
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      - lilevy-network
-
-  # lilEVY Communication Services
-  node-communication:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-node-communication
-    ports:
-      - "8005:8005"
-    environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - PEER_DISCOVERY=true
-      - MESH_NETWORK=true
-      - SYNC_INTERVAL_HOURS=24
-      - LORA_FREQUENCY_MHZ=915.0
-      - LORA_CS_PIN=25
-      - LORA_DIO0_PIN=4
-      - LORA_RESET_PIN=17
-      - DEPLOYMENT_REGION=us
-      - GPS_DEVICE=/dev/ttyAMA0
-      - LOG_LEVEL=INFO
-    depends_on:
-      local-rag:
-        condition: service_healthy
-    devices:
-      - /dev/spidev0.0:/dev/spidev0.0
-      - /dev/ttyAMA0:/dev/ttyAMA0
-    volumes:
-      - /sys/class/gpio:/sys/class/gpio
-      - ./data/lilevy/telemetry:/data/telemetry
-    privileged: true
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os; print('ok')"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - lilevy-network
-
-  # lilEVY Monitoring
-  monitoring:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.lilevy
-    container_name: lilevy-monitoring
-    ports:
-      - "9090:9090"
-    environment:
-      - NODE_TYPE=lilevy
-      - NODE_ID=lilevy-001
-      - METRICS_ENABLED=true
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./data/lilevy/metrics:/data/metrics
-    restart: unless-stopped
-    networks:
-      - lilevy-network
 
 networks:
-  lilevy-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
-volumes:
-  lilevy-data:
-    driver: local
-  lilevy-models:
-    driver: local
+  default:
+    name: lilevy-network

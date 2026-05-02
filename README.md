@@ -1,785 +1,435 @@
-# EVY - EVYone, EVYwhere, EVYtime
+# EVY
 
-> **Revolutionary SMS-based AI system with Off-Grid Mesh Networking**
+EVY is an SMS-first AI assistant and edge-node prototype for communities that may have unreliable internet, limited power, or disaster-response communication needs. The project is organized around a small field node, `lilEVY`, and an optional central server, `bigEVY`.
 
-[![Status](https://img.shields.io/badge/Status-Implementation%20Ready-blue.svg)](https://github.com/evy-ai/evy)
-[![Architecture](https://img.shields.io/badge/Architecture-lilEVY%20%7C%20bigEVY-blue.svg)](https://github.com/evy-ai/evy)
-[![Mesh Network](https://img.shields.io/badge/Mesh%20Network-LoRa%20Radio-orange.svg)](https://github.com/evy-ai/evy)
-[![Edge Focus](https://img.shields.io/badge/Edge-Raspberry%20Pi%205-yellow.svg)](https://github.com/evy-ai/evy)
-[![License](https://img.shields.io/badge/License-Open%20Source-brightgreen.svg)](https://github.com/evy-ai/evy)
+This README reflects the current codebase state after a fresh review. It separates what is implemented today from what is designed, simulated, experimental, or still blocked before hardware testing.
 
-## 🌟 Overview
+## Current Status
 
-**EVY is an SMS-based AI community platform** optimized for edge deployment on Raspberry Pi 5 hardware. The system provides off-grid AI assistance accessible via SMS, designed for community action, information access, and knowledge sharing—with emergency response as a critical feature. Built for resource-constrained environments where traditional internet infrastructure is unavailable or unreliable.
+| Area | Current state |
+| --- | --- |
+| Python backend services | Implemented prototype services for SMS gateway, message routing, LLM inference, RAG, privacy filtering, emergency detection, edge database, and service integration helpers. The curated software validation suite and full backend pytest suite pass. |
+| Full Python test suite | Green in this workspace: `python -m pytest backend/tests -q` passes with the current backend tests. |
+| Rust critical-path services | SMS gateway, message router, and compression crates now pass `cargo test`. The Python integration layer still uses fallbacks rather than compiled PyO3 modules. |
+| Frontend dashboard | React/Vite dashboard exists for service health, message history, knowledge stats, and static settings views. `npm install` and `npm run build` pass; several UI controls are still display-only. |
+| Local LLM | Target local model is BitNet b1.58 2B4T through `bitnet.cpp`. The repo has a native adapter, setup script, Compose env, and health reporting; target Raspberry Pi latency/power is still unmeasured. |
+| Local RAG and knowledge packs | Current default RAG remains ChromaDB plus the local document manager. A feature-flagged SQLite FTS5 RAG store, v1 knowledge-pack manifest validator/importer, and Plus Code SMS metadata parser are implemented for pre-hardware trials. |
+| Hardware integration | GSM, LoRa, GPS, and power telemetry code paths and validation scripts exist. They have not been validated on target Raspberry Pi hardware in this repo. |
+| Simulated SMS flow | Deterministic pre-hardware smoke test passes for normal query, command, and emergency messages using real API/SMS/router/privacy services plus local LLM/RAG stubs. |
+| Deployment | `docker-compose.prehardware.yml` builds, starts, passes the container smoke test, and shuts down cleanly. `docker-compose.lilevy.yml` now points at real Python service modules and parses cleanly. The main, bigEVY, enhanced lilEVY, and hybrid Compose files also parse; bigEVY/enhanced/hybrid remain draft/experimental until their runtime entrypoints are made concrete. |
+| bigEVY | Architecture and placeholder services exist. The large-model service simulates loading and responses; it is not a production central AI node yet. |
+| enhanced lilEVY mesh mode | LoRa and smart-routing prototypes exist, but the enhanced orchestrator has model/schema/import mismatches and should be treated as experimental until repaired. |
 
-### 🚀 **Key Innovations**
-- **Edge-Optimized**: Designed for Raspberry Pi 5 with hardware constraints in mind
-- **Community Platform**: Information, knowledge sharing, and community action
-- **Emergency Response**: Critical disaster response and emergency communication capabilities
-- **Hybrid Architecture**: Rust (critical path) + Python (ecosystem) for optimal performance
-- **Compression Engine**: Edge-optimized compression for SMS responses (160-char limit)
-- **Off-Grid Operation**: No internet or cellular dependency required
-- **Solar Powered**: Truly sustainable communication infrastructure
-- **Resource-Aware**: Battery and memory-aware operations throughout
+## Start Here
 
-### 📚 **Implementation Documentation**
-- **[Unified Implementation Plan](docs/EVY_UNIFIED_IMPLEMENTATION_PLAN.md)** ⭐ **PRIMARY** - Complete 24-month roadmap (Months 1-9: Edge + Enhancements, Months 10-24: Scaling & Ecosystem)
-- **[Master Implementation Plan](docs/EVY_MASTER_IMPLEMENTATION_PLAN.md)** - Original 9-month edge-focused plan
-- **[Enhancements Plan](docs/EVY_ENHANCEMENTS_PLAN.md)** - Multiple GSM HATs, Local Connectivity, Optimization
-- **[Technical Specifications](docs/TECHNICAL_SPECIFICATIONS.md)** - Detailed component specs
-- **[Testing Plan](docs/TESTING_PLAN.md)** - Comprehensive testing strategy
-- **[Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md)** - Step-by-step deployment guide
-- **[API Documentation](docs/API_DOCUMENTATION.md)** - Complete API reference
-- **[Quick Start Guide](docs/QUICK_START_GUIDE.md)** - Get started in 30 minutes
-- **[Documentation Index](docs/INDEX.md)** - Central documentation navigation
-- **[Implementation Index](docs/README_IMPLEMENTATION.md)** - Detailed implementation navigation
+- [Minimum Reader Guide](docs/EVY_MINIMUM_READER_GUIDE.md): a plain-English overview for anyone joining the project.
+- [Current Codebase Analysis and Gaps](docs/CODEBASE_ANALYSIS_AND_GAPS.md): detailed review of what exists, what is broken, and what is hardware-gated.
+- [BitNet Local 1-Bit LLM](docs/BITNET_LOCAL_LLM.md): local model decision, setup path, and validation notes.
+- [LLM And RAG Tuning](docs/LLM_RAG_TUNING.md): retrieval/prompt evaluation harness and why training is deferred.
+- [Knowledge Packs And SQLite RAG](docs/KNOWLEDGE_PACKS_AND_SQLITE_RAG.md): signed-pack manifest, optional SQLite RAG interface, and Plus Code metadata.
+- [Observability](docs/OBSERVABILITY.md): metric names and optional local OpenTelemetry Collector profile.
+- [Technology Opportunities](docs/TECHNOLOGY_OPPORTUNITIES.md): decision matrix for additional tech worth considering.
+- [Pre-Hardware Backlog](docs/EVY_PRE_HARDWARE_BACKLOG.md): phased work items to complete before and during hardware arrival.
+- [Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md): verified pre-hardware container path and hardware bring-up order.
+- [Hardware Validation Checklist](docs/HARDWARE_VALIDATION_CHECKLIST.md): target validation order once hardware is available.
+- [Software Validation Checklist](docs/SOFTWARE_VALIDATION_CHECKLIST.md): current software gate process.
+- [Documentation Index](docs/INDEX.md): all project docs.
 
----
+## What EVY Is For
 
-## 🏗️ **Architecture**
+EVY is designed to let a person send an SMS and receive a short useful response. The intended field version should be able to:
 
-### **Dual-Node System**
+- Receive SMS messages through a GSM modem or HAT.
+- Classify requests as emergency, command, greeting, or general query.
+- Answer simple questions locally with a small model and local knowledge base.
+- Retrieve local emergency and community information from an offline RAG store.
+- Prioritize emergency messages.
+- Share selected messages or knowledge between nodes over LoRa mesh.
+- Run from a Raspberry Pi-class device with constrained memory, storage, and power.
+- Optionally offload heavier work to a bigEVY central node when a network path exists.
 
-#### **🌱 lilEVY (Edge Node)**
-- **Hardware**: Raspberry Pi 5 (8GB/16GB RAM) + GSM HAT + LoRa HAT
-- **Power**: Solar-powered (50-100W panel, 10-15W consumption)
-- **Capabilities**: SMS interface, tiny LLM inference (BitNet/edge models), local RAG, mesh networking
-- **Range**: 10-15 miles via LoRa mesh network
-- **Cost**: ~$450 per node
-- **Edge Constraints**: 8GB RAM, 4 cores, ARM64, microSD storage
-- **Optimizations**: Rust for critical path, compression engine, resource-aware operations
+The current repository is best understood as a software prototype and validation harness preparing for hardware bring-up, not a finished field appliance.
 
-#### **🏢 bigEVY (Central Node)**
-- **Hardware**: High-performance server + GPU
-- **Capabilities**: Large LLM inference, global RAG, analytics, coordination
-- **Power**: Grid-connected or large solar array
-- **Role**: Heavy AI processing, model updates, knowledge management
+## What Is Available Now
 
-### **🔗 Mesh Networking**
-```
-Communication Layers:
-├── SMS Layer: Direct user communication
-├── LoRa Layer: 10-15 mile mesh network
-├── Internet Layer: When available (fallback)
-└── Bluetooth Layer: Local area communication
-```
+### Backend Services
 
----
+The Python backend includes these FastAPI services:
 
-## 🧩 **Idealized Component Blueprint (Current)**
+- `backend/services/sms_gateway/main.py`
+  - Sends SMS through a queued path when Redis is available.
+  - Falls back to direct send when Redis is unavailable.
+  - Supports Gammu and direct serial AT-command drivers.
+  - Runs in simulation mode when no GSM driver is available.
+  - Provides endpoints for health, send, receive, sent/received history, queue stats, GSM status, and message parsing.
 
-### **lilEVY Hardware Profile (Edge Node)**
-- **Compute**: Raspberry Pi 5 (8GB/16GB)
-- **Cellular/SMS + GNSS**: SIM7600-series 4G HAT over USB (`/dev/ttyUSB0`, `/dev/ttyUSB1`)
-- **LoRa Mesh**: SX1276 LoRa HAT over SPI (`/dev/spidev0.0`) with configurable CS pin
-- **GPS**: NMEA source from LoRa/GPS HAT UART or SIM7600 GNSS path
-- **Power Telemetry**: battery level path wired for edge power-aware routing
-- **Deployment Defaults**: region-aware LoRa frequency, offline-first service priorities
+- `backend/services/message_router/main.py`
+  - Classifies messages.
+  - Routes to RAG and LLM services.
+  - Chunks long responses into SMS-sized messages.
+  - Handles simple emergency templates and operator status commands.
+  - Tracks basic route statistics and overload rejections.
 
-### **lilEVY Service Topology**
-- **`sms-gateway`**: SMS ingress/egress with direct-send fallback when queue is unavailable
-- **`message-router`**: intent-aware routing, multi-SMS chunking, and operator `!status` command
-- **`tiny-llm`**: local inference with Ollama defaults and BitNet-ready provider switching
-- **`local-rag`**: ChromaDB-backed retrieval with similarity thresholding and hash-based sync
-- **`node-communication`**: LoRa node messaging, discovery, routing, and telemetry plumbing
-- **`monitoring`**: Prometheus metrics collection for edge observability
+- `backend/services/llm_inference/main.py`
+  - Supports `openai`, `ollama`, `tiny`, and `bitnet` provider modes.
+  - Defaults to local BitNet b1.58 2B4T through `bitnet.cpp` for lilEVY.
+  - Uses `TinyModelManager` for local/Ollama-backed tiny-model paths.
+  - Reports whether the configured BitNet runtime and model file are installed.
+  - Enforces short SMS-style responses.
+  - Includes provider switching and tiny-model load/unload endpoints.
 
-### **Cross-Cutting Platform Components**
-- **Rust services**: `sms_gateway`, `message_router`, and `compression` crates for critical paths
-- **Emergency response**: template + detector + service flow for high-priority scenarios
-- **Shared integration layer**: service discovery, rust bridge utilities, and local edge database
-- **Validation harnesses**: full software suite and per-device hardware validation scripts
+- `backend/services/rag_service/main.py`
+  - Uses ChromaDB plus a local document manager.
+  - Provides optional SQLite RAG endpoints behind `SQLITE_RAG_ENABLED=true` or `RAG_BACKEND=sqlite`.
+  - Imports v1 knowledge packs through a manifest with source, expiration, checksum, and optional signature metadata.
+  - Supports search, add, bulk import, export, categories, delete, embedding test, and advanced search endpoints.
+  - Includes chunking, similarity filtering, and local document sync.
 
----
+- `backend/services/privacy_filter/main.py`
+  - Includes message validation, sanitization, rate-limit checks, consent records, blocklist operations, and audit-log endpoints.
 
-## 🔧 **Hardware Requirements**
+- `backend/services/emergency_response/*`
+  - Detects emergency language and produces resource-aware emergency responses.
+  - Exists as a service module, but is not fully wired into the main message-router flow.
 
-### **🌱 lilEVY Node (Edge)**
-```yaml
-Core Components:
-  Raspberry Pi 5 (8GB RAM): $80-100
-    - ARM Cortex-A76 quad-core 64-bit processor
-    - 8GB LPDDR5 RAM (16GB optional)
-    - Gigabit Ethernet, WiFi, Bluetooth
-    - 40-pin GPIO header
+- `backend/shared/database/edge_db.py`
+  - SQLite edge database with intended WAL, batching, retention, analytics, and emergency-log tables.
+  - Immediate inserts, batching, stats, and retention behavior are covered by passing tests; Linux/Raspberry Pi filesystem behavior still needs hardware validation.
 
-  GSM HAT (SMS Communication): $50
-    - SIM800L or similar GSM module
-    - Antenna included
-    - SMS/voice/data capabilities
-    - Power: 3.7V-4.2V, 2A peak
+### Rust Services
 
-  LoRa HAT (Mesh Networking): $25
-    - SX1276 LoRa transceiver
-    - 915MHz default for US (region-configurable)
-    - 14dBm output power
-    - 10-15 mile range (line of sight)
+Rust crates are present under `backend/rust_services/`:
 
-  MicroSD Card (32GB+): $15
-    - Class 10 or better
-    - 32GB minimum (recommended 64GB)
-    - For OS and data storage
+- `sms_gateway`
+- `message_router`
+- `compression`
 
-  Power Management:
-    Solar Panel (50-100W): $80-150
-      - 12V or 24V panel
-      - Weatherproof design
-      - MC4 connectors
-    
-    Charge Controller: $25
-      - MPPT or PWM type
-      - 12V/24V compatible
-      - Overcharge protection
-    
-    Battery (12V 36Ah): $120
-      - Deep cycle AGM or lithium
-      - 0.36kWh capacity
-      - 3+ days runtime without sun
+These are intended to become critical-path services or PyO3-backed modules. They now compile and pass their local tests, but they are not yet active runtime dependencies because the Python bridge in `backend/shared/integration/rust_services.py` still explicitly runs fallback behavior.
 
-  Enclosure & Accessories:
-    Weatherproof Enclosure: $40
-      - IP65 rated
-      - Vented for cooling
-      - Mounting brackets
-    
-    Antennas: $30
-      - GSM antenna (2dBi)
-      - LoRa antenna (3dBi)
-      - Coaxial cables
-    
-    Cables & Connectors: $20
-      - Jumper wires
-      - Power cables
-      - Mounting hardware
+### Frontend
 
-Total lilEVY Cost: ~$400-450
-```
+The frontend is a React 18, TypeScript, Vite, TailwindCSS dashboard with pages for:
 
-### **🏢 bigEVY Node (Central)**
-```yaml
-Server Hardware:
-  Main Server: $2,000-5,000
-    - Intel Xeon or AMD EPYC processor
-    - 32GB+ RAM (64GB recommended)
-    - 1TB+ SSD storage
-    - Gigabit Ethernet
-    - Redundant power supplies
+- Dashboard
+- Messages
+- Services
+- Knowledge
+- Settings
 
-  GPU (Optional but Recommended): $1,000-3,000
-    - NVIDIA RTX 4090 or A6000
-    - 24GB+ VRAM
-    - For large model inference
-    - CUDA support
+The dashboard reads backend health/history/stat endpoints, but several actions and settings controls are not wired to backend mutations yet.
+The Vite API base URL uses `VITE_API_URL`, with `REACT_APP_API_URL` retained as a fallback for older local env files.
 
-  Networking:
-    High-Speed Internet: $100/month
-      - Fiber or cable connection
-      - 100+ Mbps upload
-      - Static IP (recommended)
-    
-    Backup Internet: $50/month
-      - Cellular hotspot
-      - 4G/5G connection
-      - Failover capability
+### Knowledge Data
 
-  Power & Cooling:
-    UPS Battery Backup: $500
-      - 1500VA or higher
-      - 30+ minute runtime
-      - Network management
-    
-    Cooling System: $200
-      - Server rack fans
-      - Temperature monitoring
-      - Automatic shutdown
+The `data/` folder contains generated local knowledge JSON files, including emergency, Wichita/local services, education, legal, community, health, cultural, technology, security, automation, analytics, and advanced-feature datasets.
 
-Total bigEVY Cost: $4,000-10,000+
-```
+Scripts under `scripts/` can build and import knowledge data, including:
 
-### **📡 Enhanced lilEVY (With Mesh Networking)**
-```yaml
-Additional Components for Mesh:
-  LoRa HAT: $25
-    - SX1276 LoRa transceiver
-    - 915MHz default for US deployments
-    - 14dBm output power
+- `scripts/bootstrap_knowledge_base.py`
+- `scripts/import_to_rag.py`
+- `scripts/build_*`
+- `scripts/collect_local_data.py`
 
-  LoRa Antenna: $15
-    - Tuned to deployment region (915MHz for US)
-    - 3dBi gain
-    - Weatherproof design
+Pre-hardware knowledge-pack support is implemented in:
 
-  Antenna Mount: $10
-    - Mast or pole mount
-    - Coaxial cable routing
-    - Grounding system
+- `backend/services/rag_service/knowledge_pack.py`
+- `backend/services/rag_service/sqlite_rag_store.py`
+- `scripts/validate_knowledge_pack.py`
+- `docs/KNOWLEDGE_PACKS_AND_SQLITE_RAG.md`
 
-Additional Cost: +$50 per node
-Total Enhanced lilEVY: ~$450
-```
+### Validation Assets
 
-### **🔌 Development & Testing Hardware**
-```yaml
-Development Setup:
-  Raspberry Pi 5 Kit: $120
-    - Pi 5, power supply, case
-    - MicroSD card, cables
-    - For development/testing
+Software validation:
 
-  GSM/LoRa Development Kit: $150
-    - Multiple HATs for testing
-    - Various antennas
-    - Breadboard setup
-
-  Multimeter & Tools: $50
-    - Digital multimeter
-    - Soldering iron
-    - Wire strippers, crimpers
-
-  Network Testing: $100
-    - LoRa range testers
-    - Signal analyzers
-    - Network monitoring tools
-
-Development Cost: ~$400
-```
-
-### **📋 Hardware Compatibility Matrix**
-```yaml
-lilEVY Compatibility:
-  Raspberry Pi Models:
-    ✅ Pi 5 (8GB/16GB) - Recommended
-    ✅ Pi 4 (8GB) - Compatible fallback
-    ⚠️ Pi 3B+ - Limited performance
-    ❌ Pi 1/2/Zero - Not supported
-
-  GSM HAT Compatibility:
-    ✅ SIM800L - Primary support
-    ✅ SIM900 - Compatible
-    ✅ SIM7600 - 4G support
-    ❌ SIM7000 - Different driver needed
-
-  LoRa HAT Compatibility:
-    ✅ SX1276 - Primary support
-    ✅ SX1278 - Compatible
-    ✅ SX1262 - Future support
-    ❌ SX1280 - Different frequency
-
-  Power Requirements:
-    Pi 5 + GSM HAT: ~8W
-    Pi 5 + GSM + LoRa: ~10W
-    Solar Panel: 50W minimum
-    Battery: 36Ah recommended
-```
-
-### **🛒 Recommended Suppliers**
-```yaml
-Raspberry Pi & Accessories:
-  - Adafruit: https://adafruit.com
-  - SparkFun: https://sparkfun.com
-  - Digi-Key: https://digikey.com
-  - Mouser: https://mouser.com
-
-GSM/LoRa HATs:
-  - Waveshare: https://waveshare.com
-  - Dragino: https://dragino.com
-  - Adafruit: LoRa modules
-  - SparkFun: GSM modules
-
-Solar & Power:
-  - Renogy: https://renogy.com
-  - Goal Zero: https://goalzero.com
-  - Amazon: Solar panels
-  - Local electrical suppliers
-
-Enclosures & Mounting:
-  - Polycase: https://polycase.com
-  - Bud Industries: https://budind.com
-  - Amazon: Weatherproof boxes
-  - Local hardware stores
-```
-
-### **💰 Cost Breakdown by Deployment Scale**
-```yaml
-Small Deployment (3-5 nodes):
-  lilEVY Nodes: $450 × 5 = $2,250
-  bigEVY Node: $4,000
-  Development Tools: $400
-  Total: ~$6,650
-
-Medium Deployment (10-20 nodes):
-  lilEVY Nodes: $450 × 15 = $6,750
-  bigEVY Node: $6,000 (with GPU)
-  Network Infrastructure: $1,000
-  Total: ~$13,750
-
-Large Deployment (50+ nodes):
-  lilEVY Nodes: $450 × 50 = $22,500
-  bigEVY Cluster: $15,000 (multiple servers)
-  Network Infrastructure: $5,000
-  Total: ~$42,500
-
-Cost per User (100 users/node):
-  Small: $66.50 per user
-  Medium: $9.17 per user
-  Large: $2.83 per user
-```
-
----
-
-## 🛠️ **Technology Stack**
-
-### **Backend Services**
-- **Rust Components** (Critical Path):
-  - SMS Gateway (`backend/rust_services/sms_gateway`)
-  - Message Router (`backend/rust_services/message_router`)
-  - Compression Engine (`backend/rust_services/compression`)
-- **Python Components** (Ecosystem):
-  - LLM Inference (Ollama default + BitNet support)
-  - RAG Service (ChromaDB + persistent embedding cache)
-  - SMS Gateway + Message Router API services
-  - LoRa Node Communication + Emergency Response
-  - Edge DB + Shared integration modules
-- **Framework**: Python 3.11, FastAPI, Uvicorn
-- **LLM**: BitNet-first edge inference path
-- **Vector DB**: ChromaDB (persistent edge store)
-- **Database**: SQLite (edge-first persistence)
-- **Monitoring**: Prometheus (edge metrics)
-- **Containerization**: Docker + Docker Compose
-
-### **Mesh Networking**
-- **Radio**: LoRa (region-aware defaults; 915MHz for US deployments)
-- **Protocol**: Custom EVY Mesh Protocol with self-healing
-- **Security**: AES-256 encryption, digital signatures
-- **Routing**: Intelligent multi-hop routing with priority queuing
-
-### **Frontend**
-- **Framework**: React 18, TypeScript, Vite
-- **Styling**: TailwindCSS
-- **Features**: Real-time mesh visualization, LoRa monitoring
-
----
-
-## 🚀 **Quick Start**
-
-### **For Implementation**
-See **[Quick Start Guide](docs/QUICK_START_GUIDE.md)** for rapid deployment (30 minutes)
-
-### **For Development**
-See **[Development Setup](docs/DEVELOPMENT_SETUP.md)** for local development environment
-
-### **Standard lilEVY Deployment**
 ```bash
-# Clone repository
-git clone https://github.com/evy-ai/evy.git
-cd EVY
-
-# Deploy standard lilEVY
-./deploy-lilevy.sh
+python scripts/test_software_suite.py --stage full
 ```
 
-### **Enhanced lilEVY with Mesh Networking**
+Deterministic pre-hardware SMS smoke test:
+
 ```bash
-# Deploy enhanced lilEVY with LoRa radio
-./deploy-enhanced-lilevy.sh
+python scripts/pre_hardware_smoke.py
 ```
 
-### **Hybrid System (lilEVY + bigEVY)**
+Containerized pre-hardware smoke test:
+
 ```bash
-# Deploy both lilEVY and bigEVY
-./deploy-hybrid.sh
+python scripts/pre_hardware_compose_smoke.py --base-port 18100
 ```
 
-### **Service Endpoints**
-- **Frontend Dashboard**: http://localhost:3000
-- **API Gateway**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Mesh Monitoring**: http://localhost:3001
-- **Prometheus**: http://localhost:9090
+Hardware validation, once hardware exists:
 
-### **📖 Implementation Resources**
-- **[Master Implementation Plan](docs/EVY_MASTER_IMPLEMENTATION_PLAN.md)** - Complete roadmap
-- **[Technical Specifications](docs/TECHNICAL_SPECIFICATIONS.md)** - Component details
-- **[Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md)** - Detailed deployment steps
-- **[Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)** - Pre-implementation readiness
-
----
-
-## 📱 **Usage**
-
-### **SMS Interface**
-Send any SMS to your lilEVY node and receive AI-powered responses:
-
-```
-Example Queries:
-- "What hospitals are near me?"
-- "How do I perform CPR?"
-- "Weather emergency protocol"
-- "Emergency help needed" (triggers priority routing)
+```bash
+python scripts/test_edge_hardware_suite.py \
+  --gsm-device /dev/ttyUSB0 \
+  --gps-device /dev/ttyAMA0 \
+  --lora-frequency 915.0 \
+  --power-telemetry /data/telemetry/power.json
 ```
 
-### **Smart Routing**
-EVY automatically selects the best communication method:
-- **Simple queries**: Processed locally
-- **Complex queries**: Routed to bigEVY via mesh network
-- **Emergency queries**: Prioritized through fastest path
-- **Off-grid**: Full functionality without internet
+Individual hardware scripts exist for GSM, LoRa, GPS, and power telemetry.
+The hardware suite writes the standard artifact `data/lilevy/software_reports/hardware_validation_report.json`.
 
----
+Boot self-check report scaffold:
 
-## 🗂️ **Project Structure**
-
+```bash
+python scripts/boot_self_check.py
 ```
+
+Sample knowledge-pack validation and SQLite RAG import:
+
+```bash
+python scripts/validate_knowledge_pack.py --require-signature --import-sqlite --search "boil water"
+```
+
+LLM/RAG retrieval tuning without requiring a running model:
+
+```bash
+python scripts/tune_llm_rag_prompts.py --llm-url http://127.0.0.1:1
+```
+
+Optional local observability collector:
+
+```bash
+docker compose -f docker-compose.observability.yml config --quiet
+docker compose -f docker-compose.observability.yml up
+```
+
+## Important Gaps
+
+These are the highest-impact gaps before hardware testing:
+
+- Repair remaining draft bigEVY/enhanced/hybrid Dockerfiles and Compose files that reference missing modules, missing startup scripts, or missing frontend Dockerfiles.
+- Fix enhanced lilEVY orchestration mismatches before treating mesh mode as runnable.
+- Add real LoRa receive/IRQ handling, packet tests, and checksum validation.
+- Decide whether the first hardware test is GSM-only, GSM plus local RAG/LLM, or full GSM plus LoRa.
+- Add a hardware bring-up runbook with exact device paths, expected AT responses, LoRa frequency, GPIO pins, and pass/fail evidence.
+- Harden secrets, API access, operator commands, phone-number policies, logging, and emergency escalation before any public or field exposure.
+- Decide whether to take the breaking Vite/esbuild upgrade called out by `npm audit` or document the dev-server-only risk for the pre-hardware branch.
+
+See [Current Codebase Analysis and Gaps](docs/CODEBASE_ANALYSIS_AND_GAPS.md) and [Pre-Hardware Backlog](docs/EVY_PRE_HARDWARE_BACKLOG.md) for the detailed breakdown.
+
+## Target Architecture
+
+```text
+User phone
+  |
+  | SMS
+  v
+lilEVY edge node
+  |
+  |-- SMS gateway
+  |-- Message router
+  |-- Privacy filter
+  |-- Emergency response logic
+  |-- Local RAG / ChromaDB or optional SQLite FTS5 store
+  |-- Local tiny LLM / Ollama path
+  |-- SQLite edge database
+  |-- Optional LoRa mesh service
+  |
+  | LoRa, internet, or other available link
+  v
+Optional bigEVY central node
+  |
+  |-- Larger model inference
+  |-- Global RAG
+  |-- Sync, analytics, model updates
+```
+
+## Repository Map
+
+```text
 EVY/
-├── backend/
-│   ├── lilevy/                    # lilEVY-specific services
-│   │   └── services/
-│   │       ├── lora_radio_service.py      # LoRa mesh networking
-│   │       ├── enhanced_lilevy_service.py # Main orchestrator
-│   │       └── tiny_llm_service.py        # Edge LLM inference
-│   ├── bigevy/                    # bigEVY-specific services
-│   │   └── services/
-│   │       ├── large_llm_service.py       # Central LLM processing
-│   │       └── global_rag_service.py      # Global knowledge base
-│   ├── shared/                    # Shared utilities
-│   │   ├── communication/
-│   │   │   ├── smart_router.py           # Intelligent routing
-│   │   │   ├── mesh_protocol.py          # Mesh networking
-│   │   │   └── knowledge_sync.py         # Data synchronization
-│   │   ├── models.py              # Data models
-│   │   └── config.py              # Configuration
-│   ├── services/                  # Core nanoservices
-│   │   ├── sms_gateway/           # SMS communication
-│   │   ├── message_router/        # Message routing
-│   │   ├── llm_inference/         # LLM inference engine
-│   │   ├── rag_service/           # Retrieval-Augmented Generation
-│   │   └── privacy_filter/        # Data sanitization
-│   └── api_gateway/               # Main API gateway
-├── frontend/                      # React dashboard
-├── scripts/                       # Knowledge base builders
-├── monitoring/                    # Prometheus configuration
-├── docker-compose.lilevy.yml      # lilEVY deployment
-├── docker-compose.bigevy.yml      # bigEVY deployment
-├── docker-compose.enhanced-lilevy.yml # Enhanced lilEVY with LoRa
-├── docker-compose.hybrid.yml      # Hybrid system deployment
-└── deploy-*.sh                    # Deployment scripts
+  backend/
+    api_gateway/                 FastAPI gateway prototype
+    services/
+      sms_gateway/               SMS, GSM, parser, queue
+      message_router/            Routing and response flow
+      llm_inference/             OpenAI/Ollama/tiny model service
+      rag_service/               ChromaDB and document manager
+      privacy_filter/            Sanitization, consent, rate limits
+      emergency_response/        Emergency detector and templates
+    lilevy/services/             Edge-node, LoRa, local RAG/LLM prototypes
+    bigevy/services/             Central-node prototype services
+    shared/                      Models, config, database, integration helpers
+    rust_services/               Rust SMS/router/compression crates
+    tests/                       Python test suite
+  frontend/                      React/Vite dashboard
+  scripts/                       Knowledge builders and validation scripts
+  data/                          Generated local knowledge datasets and reports
+  docs/                          Architecture, plans, validation, and reviews
+  monitoring/                    Prometheus configuration
+  docker-compose.prehardware.yml Verified lightweight pre-hardware container profile
+  docker-compose*.yml            Deployment drafts for local/lilEVY/bigEVY/hybrid modes
 ```
 
----
+## Target Hardware
 
-## 🔧 **Configuration**
+The target lilEVY node is currently:
 
-### **Environment Variables**
+- Raspberry Pi 5 preferred, 8 GB minimum RAM.
+- 64 GB or larger microSD/SSD storage for OS, models, logs, and local knowledge.
+- SIM7600-class or compatible GSM/LTE HAT for SMS.
+- SX1276-class LoRa HAT using SPI and GPIO.
+- GPS via UART or modem GNSS path.
+- Power telemetry source exposed through a JSON file or future I2C integration.
+- 50 W minimum solar panel for early testing, larger depending on measured load.
+- Battery sized from measured load; the previous estimate targets roughly 12 V / 36 Ah for multi-day runtime.
+- Weather-resistant enclosure, antennas, grounding, cable strain relief, and thermal planning.
+
+Target defaults in code and validation scripts:
+
+- GSM device: `/dev/ttyUSB0`
+- GPS device: `/dev/ttyAMA0`
+- LoRa SPI: `/dev/spidev0.0`
+- LoRa frequency for US testing: `915.0 MHz`
+- LoRa GPIO defaults: CS `25`, DIO0 `4`, reset `17`
+- Power telemetry file: `/data/telemetry/power.json`
+- Local LLM target: BitNet b1.58 2B4T through `bitnet.cpp`
+- Local BitNet model path: `/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf`
+- Local BitNet runtime path: `/opt/bitnet.cpp`
+- Optional SQLite RAG DB path: `/data/lilevy/sqlite_rag.db`
+- Boot self-check report path: `data/lilevy/software_reports/boot_self_check_report.json`
+
+These defaults should be confirmed against the exact HATs before hardware arrives.
+
+## Software Requirements
+
+Backend:
+
+- Python 3.11 for local development.
+- `pip install -r backend/requirements.txt`
+- Optional local Ollama service for local LLM mode.
+- Optional Redis for queued SMS mode.
+- Optional ChromaDB persistence directory for RAG.
+- Hardware-specific Linux packages for Gammu, serial, SPI, GPIO, and Raspberry Pi interfaces.
+
+Frontend:
+
+- Node.js 20 or compatible current LTS.
+- `npm install` from `frontend/`
+- `npm run dev` for local dashboard development.
+- `npm run build` for the current frontend build gate.
+
+Rust:
+
+- Rust toolchain and Cargo.
+- `cargo test` in each crate under `backend/rust_services/`.
+- Rust crates are validated as standalone crates, but PyO3/runtime integration is still future work.
+
+## Validation Baseline From This Review
+
+Commands run from `C:\Users\jonat\EVY`:
+
 ```bash
-# Core Configuration
-NODE_TYPE=lilevy|bigevy
-NODE_ID=unique-node-identifier
-LLM_PROVIDER=openai|ollama
-OPENAI_API_KEY=your_api_key
-
-# LoRa Mesh Configuration
-LORA_ENABLED=true
-LORA_FREQUENCY=915.0
-LORA_POWER=14
-MESH_NETWORK_ENABLED=true
-SMART_ROUTING_ENABLED=true
-
-# SMS Configuration
-SMS_DEVICE=/dev/ttyUSB1
-GSM_ENABLED=true
-
-# Performance Tuning
-MAX_SMS_PER_MINUTE=10
-MAX_SMS_PER_HOUR=100
-RESPONSE_TIME_TARGET=5
+python scripts/test_software_suite.py --stage full
 ```
 
----
+Result: passed, including the pre-hardware smoke test.
 
-## 📊 **Knowledge Base**
-
-### **Comprehensive Local Knowledge (626 entries, 15.4MB)**
-- **Emergency Procedures**: 54 entries (CPR, first aid, disaster response)
-- **Local Services**: 40 entries (hospitals, utilities, government)
-- **Educational Resources**: 34 entries (K-12, higher ed, adult learning)
-- **Health & Wellness**: 26 entries (preventive care, chronic disease)
-- **Legal & Regulatory**: 29 entries (rights, procedures, resources)
-- **Community Services**: 36 entries (social services, mental health)
-- **Cultural & Entertainment**: 35 entries (museums, theaters, parks)
-- **Technology & Digital**: 26 entries (connectivity, digital literacy)
-- **Advanced Features**: 300+ entries (AI, security, automation)
-
-### **Real-Time Synchronization**
-- **bigEVY → lilEVY**: Priority-based knowledge updates
-- **Emergency Alerts**: Immediate weather, safety, system alerts
-- **Community Updates**: Local events, service changes
-- **Model Updates**: AI model improvements and patches
-
----
-
-## 🌍 **Deployment Options**
-
-### **1. Standard lilEVY** (SMS + Local AI)
 ```bash
-./deploy-lilevy.sh
+python scripts/pre_hardware_smoke.py
 ```
-- SMS interface with local LLM
-- Local RAG knowledge base
-- Offline operation capability
-- Cost: ~$400 per node
 
-### **2. Enhanced lilEVY** (SMS + Mesh Network)
+Result: passed and wrote `data/lilevy/software_reports/pre_hardware_smoke_report.json`.
+
 ```bash
-./deploy-enhanced-lilevy.sh
+python -m pytest backend/tests -q
 ```
-- All standard features plus:
-- LoRa mesh networking (10-15 mile range)
-- Smart communication routing
-- Self-healing network capabilities
-- Cost: ~$450 per node
 
-### **3. Hybrid System** (lilEVY + bigEVY)
+Result: passed with the current backend test suite.
+
 ```bash
-./deploy-hybrid.sh
-```
-- Multiple lilEVY nodes + central bigEVY
-- Complex query processing
-- Global knowledge management
-- Advanced analytics and monitoring
-
----
-
-## 📈 **Performance Metrics**
-
-### **Communication Performance**
-```yaml
-SMS Interface:
-  Response Time: <10s (target: <15s)
-  Success Rate: >95%
-  Character Limit: 160 (SMS standard)
-  Uptime: >99%
-  Latency: <50ms (Rust SMS Gateway)
-
-LoRa Mesh Network:
-  Range: 10-15 miles (line of sight)
-  Data Rate: 0.3-50 kbps
-  Latency: <2.5s (with compression)
-  Reliability: >95% message delivery
-  Power: <1W (transmitting)
-
-Smart Routing:
-  Decision Time: <50ms (Rust Message Router)
-  Fallback Time: <1 second
-  Success Rate: >98%
-  Coverage: Unlimited (via mesh)
-
-Compression:
-  Compression Time: <1s (rule-based), <1.5s (with model)
-  Compression Ratio: 40-50% (vs 20-30% truncation)
-  Memory Usage: <50MB
+cargo test
 ```
 
-### **Resource Usage (Edge Constraints)**
-```yaml
-lilEVY Node (Raspberry Pi 5, 8GB RAM):
-  Memory Budget:
-    OS & System: 1.0GB
-    Rust Services: 0.5GB (SMS, Router, Compression, Mesh)
-    Python Services: 1.5GB (LLM, RAG, Emergency)
-    Models: 2.0GB (BitNet-class edge models)
-    Database Cache: 0.5GB
-    Buffer: 1.4GB
-    Total: 7.0GB (87.5% utilization)
-  
-  CPU Budget (4 cores):
-    SMS Gateway: 25% (Core 0)
-    Message Router: 25% (Core 1)
-    LLM Inference: 50% (Core 2)
-    RAG Service: 25% (Core 3)
-    Other Services: 25% (Shared)
-    Total: 150% (overlap acceptable)
-  
-  Power Budget:
-    Raspberry Pi: 5-10W (idle-active)
-    GSM HAT: 2-5W (idle-transmitting)
-    LoRa HAT: 0.5-1W (idle-transmitting)
-    Services: 2-4W (idle-active)
-    Total: 9.5-20W (within 15W target)
-  
-  Storage Budget (128GB):
-    OS: 8GB
-    Models: 5GB (compressed, quantized)
-    Database: 2GB (SQLite, with growth)
-    Logs: 1GB (rotated, minimal)
-    Services: 2GB
-    Buffer: 110GB
-    Total: 18GB (14% utilization)
+Result: passed in `sms_gateway`, `message_router`, and `compression`.
+
+```bash
+npm run build
 ```
 
----
+Result: passed after `npm install`.
 
-## 🎯 **Use Cases**
+```bash
+docker compose config --quiet
+```
 
-### **Community Information & Knowledge**
-- **Local Information Access**: Services, events, news, and community resources
-- **Knowledge Sharing**: Educational content, tutorials, and learning resources
-- **Community Action**: Volunteer coordination, community organizing, local initiatives
-- **Digital Bridge**: Connect communities without reliable internet infrastructure
-- **Information Democracy**: Universal access to information via SMS
+Result: passed for the main Compose configuration.
 
-### **Emergency Response**
-- **Disaster Communication**: Works when cell towers fail
-- **Emergency Coordination**: First responder communication
-- **Public Safety Alerts**: Weather alerts, evacuation notices
-- **Emergency Information**: Access to emergency procedures, medical info
-- **Resource Management**: Supply tracking, volunteer coordination
-- **Infrastructure Independence**: Off-grid operation during disasters
+```bash
+python scripts/pre_hardware_compose_smoke.py --base-port 18100
+```
 
-### **Rural & Remote Communities**
-- **Digital Bridge**: Connect remote areas without infrastructure
-- **Local Services**: Access to healthcare, education, government services
-- **Community Connectivity**: Mesh networking for community-wide communication
-- **Educational Support**: Learning resources and tutoring
-- **Agricultural Information**: Farming tips, weather, market prices
+Result: passed for the lightweight pre-hardware Compose stack.
 
-### **Research & Field Applications**
-- **Remote Stations**: Data collection and sharing
-- **Environmental Monitoring**: Sensor networks and reporting
-- **Scientific Collaboration**: Research coordination
-- **Field Studies**: Off-grid data access and analysis
+## Deployment Notes
 
----
+Use `docker-compose.prehardware.yml` as the first verified container path. It runs the real API/SMS/router/privacy services with deterministic RAG/LLM stubs:
 
-## 🔮 **Roadmap & Implementation Status**
+```bash
+python scripts/pre_hardware_compose_smoke.py --base-port 18100
+```
 
-### **✅ Foundation + Edge Hardening (Complete)**
-- ✅ Offline-first defaults and deployment gating are implemented
-- ✅ GSM/LoRa/GPS/power hardware paths are wired in service code
-- ✅ RAG reliability improvements are in place (cache + threshold + hash sync)
-- ✅ BitNet/local-first routing updates are integrated
-- ✅ Verification and operator observability workflows are added
+Treat `docker-compose.lilevy.yml` as the config-verified core edge-node profile. It points at real API/SMS/router/LLM/RAG/privacy modules and now passes:
 
-### **✅ Validation Assets (Complete)**
-- ✅ Full software validation suite (`scripts/test_software_suite.py`)
-- ✅ Hardware validation checklist + per-device test scripts
-- ✅ Integration and regression test updates for current architecture
+```bash
+docker compose -f docker-compose.lilevy.yml config --quiet
+```
 
-### **📌 Next Execution Focus**
-- [ ] Run hardware suite on target Pi hardware and record baselines
-- [ ] Publish operator runbooks from measured field metrics
-- [ ] Promote release cut after hardware go/no-go signoff
+On Linux/Raspberry Pi hardware, `deploy-lilevy.sh` creates the runtime directories, writes `.env.lilevy`, builds the core profile, starts the services, and checks the configured health endpoints.
 
-### **📋 Implementation Timeline**
+Before local LLM field testing, install the 1-bit runtime/model:
 
-**Phase 1: Edge Implementation (Months 1-9)**
-- **Months 1-3**: Critical Foundation (Hardware validation, Rust services, Integration)
-- **Months 4-6**: Core Infrastructure (Model management, Database, Mesh, Monitoring) + Multiple GSM HATs
-- **Months 7-9**: Production Readiness (Security, API Gateway, Deployment) + Local Connectivity + Hybrid Cloud SMS
+```bash
+bash scripts/setup_bitnet_cpp.sh
+```
 
-**Phase 2: Multi-Node Deployment (Months 10-12)**
-- Multi-node architecture, bigEVY integration, network deployment
+Then capture a readiness report:
 
-**Phase 3: Production Deployment (Months 13-18)**
-- Security & compliance, performance optimization, pilot deployment, production launch
+```bash
+python scripts/validate_bitnet_local_llm.py --run-inference
+```
 
-**Phase 4: Community & Ecosystem (Months 19-24)**
-- Open source release, partnerships, module marketplace, international expansion, global impact
+Then run the SMS prompt benchmark:
 
-See **[Unified Implementation Plan](docs/EVY_UNIFIED_IMPLEMENTATION_PLAN.md)** ⭐ for complete 24-month timeline.
+```bash
+python scripts/benchmark_bitnet_sms_prompts.py
+```
 
----
+Details are in [BitNet Local 1-Bit LLM](docs/BITNET_LOCAL_LLM.md).
 
-## 📚 **Documentation**
+Treat the main `docker-compose.yml` as the full-service deployment path under repair. It now passes:
 
-### **Implementation Documentation**
-- **[Master Implementation Plan](docs/EVY_MASTER_IMPLEMENTATION_PLAN.md)** - Complete 9-month roadmap with phases, milestones, and resource budgets
-- **[Technical Specifications](docs/TECHNICAL_SPECIFICATIONS.md)** - Detailed component specifications, interfaces, and algorithms
-- **[Testing Plan](docs/TESTING_PLAN.md)** - Comprehensive testing strategy with unit, integration, and hardware tests
-- **[Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md)** - Step-by-step deployment guide for edge hardware
-- **[API Documentation](docs/API_DOCUMENTATION.md)** - Complete API reference for all services
-- **[Quick Start Guide](docs/QUICK_START_GUIDE.md)** - Get started in 30 minutes
-- **[Development Setup](docs/DEVELOPMENT_SETUP.md)** - Local development environment setup
-- **[Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)** - Pre-implementation readiness checklist
-- **[Documentation Index](docs/INDEX.md)** - Central documentation navigation
-- **[Implementation Index](docs/README_IMPLEMENTATION.md)** - Detailed implementation navigation
+```bash
+docker compose config --quiet
+```
 
-### **Strategic Documents**
-- **[Pivot Strategy](docs/EVY_PIVOT_STRATEGY.md)** - Community platform strategy with emergency response focus
-- **[Compression Integration](docs/EVY_COMPRESSION_INTEGRATION.md)** - Compression engine integration details
-- **[Rust Refactor Analysis](docs/EVY_RUST_REFACTOR_ANALYSIS.md)** - Selective Rust refactoring strategy
-- **[Gap Analysis](docs/EVY_COMPREHENSIVE_GAP_ANALYSIS.md)** - Complete gap analysis and priorities
-- **[Competitive Landscape](docs/EVY_COMPETITIVE_LANDSCAPE.md)** - Market analysis and positioning
+Treat bigEVY, enhanced lilEVY, and hybrid deployment files as drafts until the pre-hardware backlog is completed.
 
-## 🤝 **Contributing**
+Known draft deployment blockers include:
 
-EVY is an open-source project building the future of resilient AI community communication and knowledge sharing. We welcome contributions!
+- `backend/Dockerfile.bigevy` references `backend.bigevy.main:app`, which does not exist.
+- `docker-compose.enhanced-lilevy.yml` references `frontend/Dockerfile.enhanced-lilevy`, which does not exist.
+- `backend/Dockerfile.enhanced-lilevy` starts Uvicorn against an object that is not a FastAPI app.
 
-### **How to Contribute**
-1. **Review Implementation Documentation** - Start with [Master Implementation Plan](docs/EVY_MASTER_IMPLEMENTATION_PLAN.md)
-2. **Check Implementation Checklist** - Verify readiness with [Implementation Checklist](docs/IMPLEMENTATION_CHECKLIST.md)
-3. **Fork the repository**
-4. **Create a feature branch**
-5. **Follow Technical Specifications** - Use [Technical Specifications](docs/TECHNICAL_SPECIFICATIONS.md) as reference
-6. **Add tests** - Follow [Testing Plan](docs/TESTING_PLAN.md)
-7. **Update documentation**
-8. **Submit a pull request**
+## Before Hardware Arrives
 
-### **Areas for Contribution**
-- **Rust Components**: SMS Gateway, Message Router, Compression Engine, Mesh Network
-- **Python Components**: LLM Service, RAG Service, Emergency Service
-- **Hardware Integration**: GSM/LoRa HAT drivers, power management
-- **Protocol Development**: Mesh networking improvements
-- **Knowledge Base**: Emergency procedures, local information
-- **Testing**: Unit tests, integration tests, hardware tests
-- **Documentation**: Guides, tutorials, API documentation
+The recommended phase order is:
 
----
+1. Keep software gates green: full Python tests, curated software suite, Rust crate tests, and frontend install/build.
+2. Finish deployment gates: one runnable main Compose path, draft Dockerfile cleanup, health checks, env templates.
+3. Lock hardware assumptions: HAT model, device paths, LoRa region/frequency, GPIO pins, power telemetry source.
+4. Extend the simulated SMS flow from deterministic stubs to the selected local model/RAG runtime.
+5. Add operator safety: secrets, phone allowlist, emergency command policy, logging, and runbook.
+6. Run hardware bring-up in the order GSM, LoRa, GPS, power, integrated node.
 
-## 📄 **License**
+The detailed work items are in [Pre-Hardware Backlog](docs/EVY_PRE_HARDWARE_BACKLOG.md).
 
-MIT License
+## License
 
----
+MIT License.
 
-## 📞 **Contact & Support**
+## Contact
 
-- **GitHub Issues**: [Report bugs and request features](https://github.com/evy-ai/evy/issues)
-- **Documentation**: See individual component guides
-- **Community**: Join the EVY development community
-- **Email**: jonathan.kershaw@gmail.com
-
----
-
-## 🌟 **Acknowledgments**
-
-EVY represents a paradigm shift in communication technology, combining:
-- **AI Intelligence** from modern language models
-- **Mesh Networking** resilience from LoRa radio
-- **Universal Access** through SMS interface
-- **Sustainability** through solar power
-
-**Built for a world where everyone deserves access to AI assistance, everywhere, everytime.**
-
----
-
-**EVY** - Making AI accessible to EVYone, EVYwhere, EVYtime through the power of SMS and mesh networking. 🚀📡🤖
-
----
-
----
-
-## 🎯 **Implementation Ready**
-
-EVY now includes implementation-ready architecture **and** delivered component paths across edge services, Rust critical-path modules, and validation tooling.
-
-✅ **Core edge services integrated**  
-✅ **Rust service crates included**  
-✅ **Local-first routing + BitNet path implemented**  
-✅ **RAG reliability and knowledge sync improvements applied**  
-✅ **Software and hardware validation assets available**
-
-See **[Documentation Index](docs/INDEX.md)** for the complete component-by-component reference.
-
----
-
-*Last Updated: March 2026 - Implementation + Validation Baseline Established*
+Project contact in the existing README history: `jonathan.kershaw@gmail.com`.

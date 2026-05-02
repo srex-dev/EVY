@@ -98,6 +98,11 @@ class SMSGateway:
     async def send_sms(self, message: SMSMessage) -> bool:
         """Send SMS message via queue system."""
         try:
+            if not message.id:
+                message.id = f"sms_out_{datetime.utcnow().timestamp()}"
+            if not message.timestamp:
+                message.timestamp = datetime.utcnow()
+
             # Convert priority
             queue_priority = self._convert_priority(message.priority)
             
@@ -112,13 +117,17 @@ class SMSGateway:
                     phone_number=message.receiver,
                     content=message.content,
                     priority=queue_priority,
-                    metadata={'sender': message.sender, 'original_message': message.model_dump()}
+                    metadata={'sender': message.sender, 'original_message': message.model_dump(mode='json')}
                 )
                 logger.info(f"SMS queued for sending: {message_id}")
+                self.sent_messages.append(message)
                 return True
 
             # Redis-free fallback path
-            return await self._send_message_handler(message.receiver, message.content)
+            sent = await self._send_message_handler(message.receiver, message.content)
+            if sent:
+                self.sent_messages.append(message)
+            return sent
             
         except Exception as e:
             logger.error(f"Failed to queue SMS: {e}")

@@ -3,14 +3,14 @@
 //! Orchestrates intent classification, service selection, and routing
 
 use crate::config::RouterConfig;
-use crate::error::{RouterError, Result};
+use crate::error::Result;
 use crate::intent_classifier::{IntentClassifier, ClassificationResult};
 use crate::resource_monitor::ResourceMonitor;
 use crate::service_registry::{ServiceRegistry, ServiceInfo, ServiceType, RouteDecision};
 use crate::service_registry::RoutingCache;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Routing statistics
 #[derive(Debug, Clone)]

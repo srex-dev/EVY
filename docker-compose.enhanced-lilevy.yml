@@ -1,7 +1,5 @@
 # Enhanced lilEVY Deployment Configuration
 # lilEVY with LoRa Radio Integration - Off-Grid Mesh Network Node
-version: '3.8'
-
 services:
   # Enhanced lilEVY Core Services
   enhanced-lilevy:

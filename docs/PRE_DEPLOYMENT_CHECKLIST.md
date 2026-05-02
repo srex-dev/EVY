@@ -61,7 +61,11 @@ LOG_LEVEL=INFO|DEBUG|WARNING
 # lilEVY Specific
 LILEVY_GSM_DEVICE=/dev/ttyUSB0
 LILEVY_GSM_BAUD_RATE=115200
-LILEVY_DEFAULT_MODEL=tinyllama
+LILEVY_DEFAULT_MODEL=bitnet-b1.58-2B-4T
+LLM_PROVIDER=bitnet
+BITNET_MODEL=bitnet-b1.58-2B-4T
+BITNET_CPP_DIR=/opt/bitnet.cpp
+BITNET_MODEL_PATH=/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
 LILEVY_MAX_TOKENS=512
 
 # bigEVY Specific  
@@ -139,10 +143,11 @@ models/
 
 ### **7. Model Preparation**
 
-#### **lilEVY Models (Tiny):**
-- [ ] **TinyLlama** (125M parameters)
-- [ ] **DistilGPT2** (82M parameters)
-- [ ] **Phi-2 Mini** (350M parameters)
+#### **lilEVY Local LLM:**
+- [ ] **BitNet b1.58 2B4T GGUF** installed under `models/bitnet/BitNet-b1.58-2B-4T`
+- [ ] **bitnet.cpp runtime** installed under `third_party/BitNet`
+- [ ] **LLM health** reports `details.bitnet.available = true`
+- [ ] **TinyLlama/DistilGPT2/Phi-2** kept only as optional development fallbacks
 - [ ] **Embedding Model**: all-MiniLM-L6-v2
 
 #### **bigEVY Models (Large):**

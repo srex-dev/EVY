@@ -12,6 +12,13 @@ from backend.shared.config import settings
 logger = logging.getLogger(__name__)
 
 
+def _json_default(value: Any) -> str:
+    """Serialize queue metadata values that Redis cannot store directly."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
 class MessageStatus(str, Enum):
     """Message processing status."""
     PENDING = "pending"
@@ -47,14 +54,26 @@ class QueuedMessage:
         """Convert to dictionary for Redis storage."""
         data = asdict(self)
         data['created_at'] = self.created_at.isoformat()
-        data['next_retry'] = self.next_retry.isoformat() if self.next_retry else None
+        data['next_retry'] = self.next_retry.isoformat() if self.next_retry else ""
+        data['priority'] = self.priority.value if isinstance(self.priority, MessagePriority) else str(self.priority)
+        data['status'] = self.status.value if isinstance(self.status, MessageStatus) else str(self.status)
+        data['metadata'] = json.dumps(self.metadata or {}, default=_json_default)
         return data
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'QueuedMessage':
         """Create from dictionary."""
+        data = dict(data)
         data['created_at'] = datetime.fromisoformat(data['created_at'])
-        data['next_retry'] = datetime.fromisoformat(data['next_retry']) if data['next_retry'] else None
+        data['next_retry'] = datetime.fromisoformat(data['next_retry']) if data.get('next_retry') else None
+        if isinstance(data.get('metadata'), str):
+            data['metadata'] = json.loads(data['metadata'] or "{}")
+        elif data.get('metadata') is None:
+            data['metadata'] = {}
+        data['priority'] = MessagePriority(data['priority'])
+        data['status'] = MessageStatus(data['status'])
+        data['attempts'] = int(data.get('attempts', 0))
+        data['max_attempts'] = int(data.get('max_attempts', 3))
         return cls(**data)
 
 

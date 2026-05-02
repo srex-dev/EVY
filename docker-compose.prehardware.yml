@@ -1,0 +1,129 @@
+services:
+  stub-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn scripts.pre_hardware_stub_services:app --host 0.0.0.0 --port 8003
+    environment:
+      - STUB_SERVICE_NAME=stub-llm
+    ports:
+      - "${EVY_PREHW_LLM_PORT:-8003}:8003"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  stub-rag:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn scripts.pre_hardware_stub_services:app --host 0.0.0.0 --port 8004
+    environment:
+      - STUB_SERVICE_NAME=stub-rag
+    ports:
+      - "${EVY_PREHW_RAG_PORT:-8004}:8004"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8004/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  privacy-filter:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn backend.services.privacy_filter.main:app --host 0.0.0.0 --port 8005
+    environment:
+      - PRIVACY_FILTER_PORT=8005
+    ports:
+      - "${EVY_PREHW_PRIVACY_PORT:-8005}:8005"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  sms-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn backend.services.sms_gateway.main:app --host 0.0.0.0 --port 8001
+    environment:
+      - SMS_GATEWAY_PORT=8001
+      - MESSAGE_ROUTER_URL=http://message-router:8002
+      - SMS_FORWARD_MAX_RETRIES=2
+      - SMS_ROUTER_TIMEOUT_SECONDS=10
+    ports:
+      - "${EVY_PREHW_SMS_PORT:-8001}:8001"
+    depends_on:
+      message-router:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  message-router:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn backend.services.message_router.main:app --host 0.0.0.0 --port 8002
+    environment:
+      - MESSAGE_ROUTER_PORT=8002
+      - LLM_SERVICE_URL=http://stub-llm:8003
+      - RAG_SERVICE_URL=http://stub-rag:8004
+      - SMS_GATEWAY_URL=http://sms-gateway:8001
+      - PRIVACY_FILTER_URL=http://privacy-filter:8005
+    ports:
+      - "${EVY_PREHW_ROUTER_PORT:-8002}:8002"
+    depends_on:
+      stub-llm:
+        condition: service_healthy
+      stub-rag:
+        condition: service_healthy
+      privacy-filter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.prehardware
+    command: python -m uvicorn backend.api_gateway.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - API_GATEWAY_PORT=8000
+      - SMS_GATEWAY_URL=http://sms-gateway:8001
+      - MESSAGE_ROUTER_URL=http://message-router:8002
+      - LLM_INFERENCE_URL=http://stub-llm:8003
+      - RAG_SERVICE_URL=http://stub-rag:8004
+      - PRIVACY_FILTER_URL=http://privacy-filter:8005
+    ports:
+      - "${EVY_PREHW_API_PORT:-8000}:8000"
+    depends_on:
+      sms-gateway:
+        condition: service_healthy
+      message-router:
+        condition: service_healthy
+      stub-llm:
+        condition: service_healthy
+      stub-rag:
+        condition: service_healthy
+      privacy-filter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

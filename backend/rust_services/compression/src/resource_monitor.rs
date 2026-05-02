@@ -1,8 +1,5 @@
 //! Resource monitoring for compression engine
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
 /// Resource monitor (placeholder - would integrate with actual system monitoring)
 pub struct ResourceMonitor {
     available_memory_mb: usize,

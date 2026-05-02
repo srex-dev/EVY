@@ -27,6 +27,13 @@ python scripts/test_software_suite.py --stage premerge
 ## 2) Core Regression Tests
 
 - [ ] `backend/tests/test_llm_inference.py` passes
+- [ ] `backend/tests/test_llm_rag_tuning_script.py` passes
+- [ ] `backend/tests/test_knowledge_pack.py` passes
+- [ ] `backend/tests/test_knowledge_pack_script.py` passes
+- [ ] `backend/tests/test_hardware_suite_report.py` passes
+- [ ] `backend/tests/test_sqlite_rag_store.py` passes
+- [ ] `backend/tests/test_observability_and_boot.py` passes
+- [ ] `backend/tests/test_observability_profile.py` passes
 - [ ] `backend/tests/test_message_router_enhancements.py` passes
 - [ ] `backend/tests/test_routing_and_models.py` passes
 - [ ] `backend/tests/test_sms_gateway.py` passes
@@ -84,11 +91,46 @@ python scripts/test_software_suite.py --stage resilience
 - [ ] `release_gates.pass` is `true` in software suite report
 - [ ] Performance subset gate elapsed <= 30 seconds
 - [ ] Retry-path gate passes (`message_queue_retries`)
+- [ ] Deterministic pre-hardware smoke test passes
+- [ ] Full backend pytest suite passes
+- [ ] Rust crates pass `cargo test`
+- [ ] Frontend installs and builds
+- [ ] Main Compose config parses cleanly
+- [ ] Core lilEVY Compose config parses cleanly
+- [ ] Lightweight pre-hardware Compose smoke passes when Docker is available
+- [ ] BitNet manager tests pass
+- [ ] If BitNet runtime/model are installed, LLM health reports `details.bitnet.available = true`
+- [ ] If BitNet runtime/model are installed, `python scripts/validate_bitnet_local_llm.py --run-inference` passes and report is archived
+- [ ] If BitNet service is running, `python scripts/benchmark_bitnet_sms_prompts.py` passes and report is archived
+- [ ] LLM/RAG tuning report records retrieval pass/fail and LLM availability
+- [ ] Knowledge-pack validation tests pass
+- [ ] Sample knowledge-pack CLI import/search report passes
+- [ ] SQLite RAG import/search tests pass
+- [ ] Plus Code parser metadata test passes
+- [ ] Boot self-check report scaffold test passes
+- [ ] Hardware validation report artifact shape test passes
+- [ ] OpenTelemetry Collector profile test passes
 
 Recommended full run:
 
 ```bash
 python scripts/test_software_suite.py --stage full
+python scripts/pre_hardware_smoke.py
+python scripts/pre_hardware_compose_smoke.py --base-port 18100
+python -m pytest backend/tests -q
+python -m pytest backend/tests/test_bitnet_cpp_manager.py backend/tests/test_bitnet_validation_script.py backend/tests/test_bitnet_sms_benchmark.py backend/tests/test_llm_inference.py -q
+python -m pytest backend/tests/test_hardware_suite_report.py backend/tests/test_knowledge_pack.py backend/tests/test_knowledge_pack_script.py backend/tests/test_llm_rag_tuning_script.py backend/tests/test_sqlite_rag_store.py backend/tests/test_observability_and_boot.py backend/tests/test_observability_profile.py backend/tests/test_sms_gateway.py -q
+python scripts/validate_knowledge_pack.py --require-signature --import-sqlite --search "boil water"
+python scripts/tune_llm_rag_prompts.py --llm-url http://127.0.0.1:1
+python scripts/boot_self_check.py
+cd backend/rust_services/sms_gateway && cargo test
+cd ../message_router && cargo test
+cd ../compression && cargo test
+cd ../../../frontend && npm install && npm run build
+cd .. && docker compose config --quiet
+docker compose -f docker-compose.lilevy.yml config --quiet
+docker compose -f docker-compose.prehardware.yml config --quiet
+docker compose -f docker-compose.observability.yml config --quiet
 ```
 
 ## Suggested SLO Targets

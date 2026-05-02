@@ -1,0 +1,96 @@
+{
+  "pack_id": "evy-local-emergency-sample",
+  "region": "us-sample",
+  "created_at": "2026-05-02T00:00:00Z",
+  "expires_at": "2026-12-31T00:00:00Z",
+  "source_owner": "EVY sample data",
+  "source_urls": [
+    "https://example.invalid/evy-sample"
+  ],
+  "schema_version": "1.0",
+  "emergency_priority": "normal",
+  "documents": [
+    {
+      "id": "sample-emergency-shelter",
+      "title": "Emergency Shelter Guidance",
+      "category": "emergency",
+      "path": "docs/emergency_shelter.txt",
+      "checksum_sha256": "ed8ac2a4cfcbfefd0bcf6c69153f84b6449fe8adaf5839656329e9a888698cdd",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-water-safety",
+      "title": "Water Safety Guidance",
+      "category": "health",
+      "path": "docs/water_safety.txt",
+      "checksum_sha256": "3def5100ef53ab7d906424648ccd9f9540aa63db75153cffa5c6566898d93bf1",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-plus-code-usage",
+      "title": "Plus Code Usage Guidance",
+      "category": "operations",
+      "path": "docs/plus_code_usage.txt",
+      "checksum_sha256": "43913f28874b8acc26aa82fe92134cc6b1ffe7bef6599fc7be0c951d29d1f9a8",
+      "metadata": {
+        "priority": "medium",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-generator-safety",
+      "title": "Generator Safety Guidance",
+      "category": "safety",
+      "path": "docs/generator_safety.txt",
+      "checksum_sha256": "763b8917c2cf4374b3d5636db2228d0d65cc490af0510fc87e4687d005204870",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-medication-power-outage",
+      "title": "Medication Outage Guidance",
+      "category": "health",
+      "path": "docs/medication_power_outage.txt",
+      "checksum_sha256": "a3c093aa6310910df01c768f4389670ca252bf7608b77a2cb9eb5d4c13f94938",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-heat-illness",
+      "title": "Heat Illness Guidance",
+      "category": "health",
+      "path": "docs/heat_illness.txt",
+      "checksum_sha256": "0f8a90a8bfeb4958dc7e43dba09882a5d6746adae574d2df4e3da89984d965d0",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    },
+    {
+      "id": "sample-downed-power-line",
+      "title": "Downed Power Line Guidance",
+      "category": "safety",
+      "path": "docs/downed_power_line.txt",
+      "checksum_sha256": "0a1182f71c49703607d05e90ceccb56c71cae5163cdf1aef0b64937a30acfdf7",
+      "metadata": {
+        "priority": "high",
+        "sample": true
+      }
+    }
+  ],
+  "signature": {
+    "type": "development-sha256-placeholder",
+    "value": "sample-pack-not-for-field-trust",
+    "key_id": "evy-sample-dev"
+  }
+}

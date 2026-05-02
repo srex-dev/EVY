@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Server, Activity, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 
-const API_URL = import.meta.env.REACT_APP_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.REACT_APP_API_URL || 'http://localhost:8000'
 
 export default function Services() {
   const { data: servicesHealth, isLoading } = useQuery({

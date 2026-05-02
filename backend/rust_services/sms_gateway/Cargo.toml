@@ -7,6 +7,10 @@ edition = "2021"
 name = "evy_sms_gateway"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+python = []
+
 [dependencies]
 # Serial communication
 serialport = "4.3"

@@ -62,6 +62,17 @@ class MessageRouter:
         
         # Use parsing information from SMS gateway if available
         parsed_info = message.metadata.get('parsed', {}) if message.metadata else {}
+
+        # Explicit operator commands should be recognized even if upstream SMS
+        # parsing only labeled them as unknown/general text.
+        if content_lower.startswith("/") or content_lower.startswith("!status"):
+            return ProcessedMessage(
+                original_message=message,
+                message_type=MessageType.COMMAND,
+                intent="command",
+                priority=MessagePriority.HIGH,
+                requires_llm=False
+            )
         
         # Determine message type from parsed info or fallback to simple classification
         if parsed_info:

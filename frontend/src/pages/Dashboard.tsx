@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Activity, MessageSquare, Server, TrendingUp } from 'lucide-react'
 import axios from 'axios'
 
-const API_URL = import.meta.env.REACT_APP_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || import.meta.env.REACT_APP_API_URL || 'http://localhost:8000'
 
 interface ServiceHealth {
   status: string

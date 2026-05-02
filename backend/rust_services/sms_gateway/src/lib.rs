@@ -13,6 +13,7 @@ pub mod error;
 pub use gateway::SMSGateway;
 pub use config::GatewayConfig;
 pub use error::{GatewayError, Result};
+pub use message_queue::{MessagePriority, QueueStats, QueuedMessage, SMSMessageQueue};
 
 #[cfg(feature = "python")]
 pub mod python;

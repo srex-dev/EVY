@@ -176,7 +176,7 @@ Content-Type: application/json
     "response": "The capital of France is Paris.",
     "tokens_used": 8,
     "processing_time_ms": 8500,
-    "model_used": "tinyllama-4bit"
+    "model_used": "bitnet-b1.58-2B-4T"
 }
 ```
 
@@ -194,7 +194,7 @@ GET /api/v1/llm/stats
     "failed_requests": 50,
     "average_response_time_ms": 8500,
     "total_tokens_generated": 50000,
-    "current_model": "tinyllama-4bit"
+    "current_model": "bitnet-b1.58-2B-4T"
 }
 ```
 
@@ -225,6 +225,41 @@ Content-Type: application/json
         }
     ],
     "search_time_ms": 450
+}
+```
+
+### **Optional SQLite RAG Health**
+
+Enabled with `SQLITE_RAG_ENABLED=true` or `RAG_BACKEND=sqlite`.
+
+```http
+GET /sqlite-rag/health
+```
+
+### **Import Knowledge Pack**
+
+```http
+POST /sqlite-rag/import-pack
+Content-Type: application/json
+
+{
+    "pack_path": "/data/knowledge-packs/evy-local-emergency.zip",
+    "require_signature": false
+}
+```
+
+### **Search SQLite RAG**
+
+```http
+POST /sqlite-rag/search
+Content-Type: application/json
+
+{
+    "query": "storm shelter",
+    "top_k": 3,
+    "filter_metadata": {
+        "category": "emergency"
+    }
 }
 ```
 

@@ -3,6 +3,7 @@
 import pytest
 import tempfile
 import os
+import asyncio
 from datetime import datetime, timedelta
 from backend.shared.database.edge_db import EdgeDatabase
 

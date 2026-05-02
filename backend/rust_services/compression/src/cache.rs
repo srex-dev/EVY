@@ -1,7 +1,6 @@
 //! LRU cache for compression results
 
 use lru::LruCache;
-use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;

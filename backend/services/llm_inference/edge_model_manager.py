@@ -123,6 +123,14 @@ class EdgeModelManager:
                 "context_size": 512,
                 "supports_quantization": True,
             },
+            "bitnet-b1.58-2B-4T": {
+                "model_id": "microsoft/bitnet-b1.58-2B-4T",
+                "size_mb": 2400,
+                "quantized_size_mb": 1200,
+                "memory_requirement_mb": 1536,
+                "context_size": 4096,
+                "supports_quantization": True,
+            },
         }
         
         for model_name, model_info in edge_models.items():
@@ -523,7 +531,13 @@ class EdgeModelManager:
         # Unload models if battery too low
         if level < self.battery_threshold:
             logger.warning(f"Low battery ({level}%), unloading models")
-            asyncio.create_task(self._unload_all_models())
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                if self.loaded_models:
+                    asyncio.run(self._unload_all_models())
+            else:
+                loop.create_task(self._unload_all_models())
     
     async def _unload_all_models(self) -> None:
         """Unload all models (for power saving)"""

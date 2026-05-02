@@ -1,0 +1,65 @@
+[
+  {
+    "id": "storm_shelter",
+    "query": "Where should I go during a storm warning?",
+    "retrieval_query": "storm shelter local officials",
+    "category": "emergency",
+    "expected_terms": ["shelter", "local officials"],
+    "response_should_include": ["shelter"],
+    "response_should_avoid": ["internet", "google"]
+  },
+  {
+    "id": "boil_water",
+    "query": "How do I make water safe after flooding?",
+    "retrieval_query": "boil water flooding",
+    "category": "health",
+    "expected_terms": ["water", "boil"],
+    "response_should_include": ["boil"],
+    "response_should_avoid": ["drink floodwater"]
+  },
+  {
+    "id": "plus_code",
+    "query": "How should EVY handle 86HVCWC8+R9 in an SMS?",
+    "retrieval_query": "plus code location",
+    "category": "operations",
+    "expected_terms": ["plus code", "location"],
+    "response_should_include": ["location"],
+    "response_should_avoid": ["ignore"]
+  },
+  {
+    "id": "generator_indoor",
+    "query": "Can I run a generator in my garage if the door is open?",
+    "retrieval_query": "generator indoors garage carbon monoxide",
+    "category": "safety",
+    "expected_terms": ["generator", "carbon monoxide"],
+    "response_should_include": ["outside"],
+    "response_should_avoid": ["garage is safe", "run it inside"]
+  },
+  {
+    "id": "medicine_power_out",
+    "query": "My insulin needs cold storage and power is out. What now?",
+    "retrieval_query": "medicine refrigeration power outage cooler pharmacy shelter",
+    "category": "health",
+    "expected_terms": ["cooler", "pharmacy"],
+    "response_should_include": ["cooler"],
+    "response_should_avoid": ["throw it away"]
+  },
+  {
+    "id": "heat_exhaustion",
+    "query": "Someone is dizzy and sweating hard in the heat. What should I do?",
+    "retrieval_query": "heat exhaustion dizziness sweating water shade",
+    "category": "health",
+    "expected_terms": ["dizziness", "shade"],
+    "response_should_include": ["shade"],
+    "response_should_avoid": ["ignore"]
+  },
+  {
+    "id": "downed_power_line",
+    "query": "A power line is down across the street. Is it safe to move it?",
+    "retrieval_query": "downed power line stay away call utility",
+    "category": "safety",
+    "expected_terms": ["downed power lines", "keep others away"],
+    "response_should_include": ["stay away"],
+    "response_should_avoid": ["safe to move", "move it yourself"]
+  }
+]

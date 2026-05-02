@@ -36,9 +36,51 @@ class TestLLMInferenceEngine:
         """Test engine initialization with offline-first provider default."""
         with patch.object(llm_engine.tiny_model_manager, 'initialize', AsyncMock(return_value=True)):
             with patch.object(llm_engine.tiny_model_manager, 'load_model', AsyncMock(return_value=True)):
-                result = await llm_engine.initialize()
-                assert result is True
-                assert llm_engine.provider == "ollama"
+                with patch.object(llm_engine.bitnet_manager, 'initialize', AsyncMock(return_value=False)):
+                    result = await llm_engine.initialize()
+                    assert result is True
+                    assert llm_engine.provider == "bitnet"
+
+    @pytest.mark.asyncio
+    async def test_generate_response_bitnet(self, llm_engine):
+        """Test response generation with native BitNet manager."""
+        llm_engine.provider = "bitnet"
+
+        with patch.object(llm_engine.bitnet_manager, 'generate_response', AsyncMock(return_value={
+            "response": "Local BitNet answer.",
+            "model_used": "bitnet-b1.58-2B-4T",
+            "tokens_used": 3,
+            "processing_time": 0.25,
+            "runtime": "/opt/bitnet.cpp/run_inference.py",
+            "model_path": "/models/bitnet/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf",
+        })):
+            request = LLMRequest(
+                prompt="Test prompt",
+                max_length=100,
+                temperature=0.7
+            )
+
+            response = await llm_engine.generate_response(request)
+
+            assert isinstance(response, LLMResponse)
+            assert response.response == "Local BitNet answer."
+            assert response.model_used == "bitnet-b1.58-2B-4T"
+            assert response.metadata["provider"] == "bitnet.cpp"
+
+    @pytest.mark.asyncio
+    async def test_generate_response_bitnet_missing_runtime(self, llm_engine):
+        """Test clear local-only response when BitNet runtime is not installed."""
+        llm_engine.provider = "bitnet"
+
+        with patch.object(llm_engine.bitnet_manager, 'generate_response', AsyncMock(side_effect=FileNotFoundError("missing"))):
+            result = await llm_engine.initialize()
+            assert result is True
+
+            response = await llm_engine.generate_response(LLMRequest(prompt="Hello"))
+
+            assert isinstance(response, LLMResponse)
+            assert "BitNet model is not installed" in response.response
+            assert response.model_used == settings.bitnet_model
     
     @pytest.mark.asyncio
     async def test_generate_response_openai(self, llm_engine, mock_llm_response):
@@ -296,6 +338,7 @@ async def test_llm_integration_flow():
     """Test complete LLM integration flow."""
     # Create engine
     engine = LLMInferenceEngine()
+    engine.provider = "tiny"
     
     # Mock dependencies
     with patch.object(engine.tiny_model_manager, 'initialize', AsyncMock(return_value=True)):
@@ -332,6 +375,7 @@ async def test_llm_integration_flow():
 async def test_performance_benchmark():
     """Test LLM inference performance."""
     engine = LLMInferenceEngine()
+    engine.provider = "tiny"
     
     with patch.object(engine.tiny_model_manager, 'initialize', AsyncMock(return_value=True)):
         with patch.object(engine.tiny_model_manager, 'load_model', AsyncMock(return_value=True)):

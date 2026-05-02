@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from openai import AsyncOpenAI
+from pydantic import BaseModel
 import os
 import asyncio
 import hashlib
@@ -16,8 +17,16 @@ from backend.shared.config import settings
 from backend.shared.logging import setup_logger
 from backend.services.rag_service.embedding_service import LocalEmbeddingService, SimpleEmbeddingService
 from backend.services.rag_service.document_manager import DocumentManager
+from backend.services.rag_service.sqlite_rag_store import SQLiteRAGStore
 
 logger = setup_logger("rag-service")
+
+
+class KnowledgePackImportRequest(BaseModel):
+    """Request to import a local knowledge pack into SQLite RAG."""
+
+    pack_path: str
+    require_signature: Optional[bool] = None
 
 
 class RAGService:
@@ -29,6 +38,7 @@ class RAGService:
         self.collection = None
         self.openai_client = None
         self.min_similarity = settings.rag_min_similarity
+        self.sqlite_store: Optional[SQLiteRAGStore] = None
         
         # Initialize services
         self.embedding_service = LocalEmbeddingService()
@@ -43,7 +53,9 @@ class RAGService:
             "total_documents_added": 0,
             "last_search": None,
             "embedding_service_available": False,
-            "chromadb_available": False
+            "chromadb_available": False,
+            "sqlite_rag_enabled": False,
+            "sqlite_rag_available": False,
         }
         
         # Initialize OpenAI for embeddings if available
@@ -51,6 +63,7 @@ class RAGService:
             self.openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
         
         self._initialize_database()
+        self._initialize_sqlite_rag()
     
     async def initialize(self) -> bool:
         """Initialize the RAG service."""
@@ -69,6 +82,7 @@ class RAGService:
             
             # Initialize ChromaDB
             self._initialize_database()
+            self._initialize_sqlite_rag()
             
             # Add local documents to ChromaDB if needed
             await self._sync_local_documents()
@@ -109,6 +123,27 @@ class RAGService:
             self.client = None
             self.collection = None
             self.stats["chromadb_available"] = False
+
+    def _sqlite_rag_configured(self) -> bool:
+        """Return true when the optional SQLite RAG path is enabled."""
+        return settings.sqlite_rag_enabled or settings.rag_backend.lower() == "sqlite"
+
+    def _initialize_sqlite_rag(self) -> None:
+        """Initialize optional SQLite RAG store when feature flagged."""
+        self.stats["sqlite_rag_enabled"] = self._sqlite_rag_configured()
+        if not self.stats["sqlite_rag_enabled"]:
+            self.sqlite_store = None
+            self.stats["sqlite_rag_available"] = False
+            return
+
+        try:
+            self.sqlite_store = SQLiteRAGStore(settings.sqlite_rag_db_path)
+            self.stats["sqlite_rag_available"] = True
+            logger.info(f"SQLite RAG initialized at {settings.sqlite_rag_db_path}")
+        except Exception as e:
+            self.sqlite_store = None
+            self.stats["sqlite_rag_available"] = False
+            logger.error(f"Failed to initialize SQLite RAG: {e}")
     
     async def _sync_local_documents(self):
         """Sync local documents with ChromaDB."""
@@ -485,6 +520,10 @@ class RAGService:
                 "status": "unavailable",
                 "document_count": 0
             }
+            sqlite_rag_stats = {
+                "status": "disabled",
+                "enabled": self.stats["sqlite_rag_enabled"],
+            }
             
             if self.collection:
                 try:
@@ -495,15 +534,27 @@ class RAGService:
                     }
                 except Exception as e:
                     chromadb_stats = {"status": "error", "error": str(e)}
+
+            if self.sqlite_store:
+                try:
+                    sqlite_rag_stats = {
+                        "status": "available",
+                        "enabled": True,
+                        **self.sqlite_store.health(),
+                    }
+                except Exception as e:
+                    sqlite_rag_stats = {"status": "error", "enabled": True, "error": str(e)}
             
             return {
                 **self.stats,
                 "document_manager": doc_stats,
                 "chromadb": chromadb_stats,
+                "sqlite_rag": sqlite_rag_stats,
                 "embedding_service": embedding_info,
                 "services": {
                     "chromadb_available": self.stats["chromadb_available"],
-                    "embedding_service_available": self.stats["embedding_service_available"]
+                    "embedding_service_available": self.stats["embedding_service_available"],
+                    "sqlite_rag_available": self.stats["sqlite_rag_available"],
                 }
             }
             
@@ -551,6 +602,16 @@ app.add_middleware(
 )
 
 
+def _require_sqlite_rag() -> SQLiteRAGStore:
+    """Return enabled SQLite RAG store or raise a clear API error."""
+    if rag_service.sqlite_store is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SQLite RAG is disabled. Set SQLITE_RAG_ENABLED=true or RAG_BACKEND=sqlite.",
+        )
+    return rag_service.sqlite_store
+
+
 @app.get("/health", response_model=ServiceHealth)
 async def health_check():
     """Health check endpoint."""
@@ -572,6 +633,41 @@ async def search_knowledge(query: RAGQuery):
     except Exception as e:
         logger.error(f"Search endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sqlite-rag/health")
+async def sqlite_rag_health():
+    """Health for the optional SQLite RAG backend."""
+    if rag_service.sqlite_store is None:
+        return {
+            "status": "disabled",
+            "enabled": rag_service.stats.get("sqlite_rag_enabled", False),
+            "db_path": settings.sqlite_rag_db_path,
+        }
+    return {"status": "available", **rag_service.sqlite_store.health()}
+
+
+@app.post("/sqlite-rag/import-pack")
+async def import_knowledge_pack(request: KnowledgePackImportRequest):
+    """Validate and import a signed knowledge pack into SQLite RAG."""
+    store = _require_sqlite_rag()
+    require_signature = (
+        settings.knowledge_pack_require_signature
+        if request.require_signature is None
+        else request.require_signature
+    )
+    result = store.import_pack(request.pack_path, require_signature=require_signature)
+    if not result["imported"]:
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.post("/sqlite-rag/search", response_model=RAGResult)
+async def search_sqlite_rag(query: RAGQuery):
+    """Search the optional SQLite RAG backend."""
+    store = _require_sqlite_rag()
+    category = query.filter_metadata.get("category") if query.filter_metadata else None
+    return store.search(query.query, top_k=query.top_k, category=category)
 
 
 @app.post("/add")

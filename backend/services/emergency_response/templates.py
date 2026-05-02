@@ -118,8 +118,10 @@ class EmergencyTemplates:
         
         type_templates = self.templates[type_key]
         
-        # For natural disasters, check for specific subtype
-        if emergency_type == EmergencyType.NATURAL_DISASTER and disaster_subtype:
+        # For natural disasters, check for specific subtype. The detector and
+        # template modules define separate EmergencyType enums, so compare by
+        # value rather than enum identity.
+        if type_key == EmergencyType.NATURAL_DISASTER.value and disaster_subtype:
             if disaster_subtype in type_templates:
                 return type_templates[disaster_subtype]
         

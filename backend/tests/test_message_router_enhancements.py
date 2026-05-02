@@ -49,3 +49,27 @@ async def test_status_command_response_is_sms_sized():
     response = await router._handle_command(sms, processed)
     assert len(response) <= 160
     assert "Status OK" in response
+
+
+def test_slash_command_overrides_unknown_parser_metadata():
+    router = MessageRouter()
+    sms = SMSMessage(
+        sender="+1",
+        receiver="+2",
+        content="/status",
+        metadata={
+            "parsed": {
+                "intent": "unknown",
+                "category": "general",
+                "priority": "normal",
+                "requires_rag": False,
+                "requires_llm": False,
+            }
+        },
+    )
+
+    processed = router.classify_message(sms)
+
+    assert processed.message_type == MessageType.COMMAND
+    assert processed.intent == "command"
+    assert processed.requires_llm is False

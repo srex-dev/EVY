@@ -8,8 +8,8 @@ use chrono::{DateTime, Utc};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_serial::{SerialPortBuilderExt, SerialStream};
-use tracing::{debug, error, info, warn};
+use tokio_serial::{SerialPort, SerialPortBuilderExt, SerialStream};
+use tracing::{debug, info, warn};
 
 /// GSM driver trait for different implementations
 #[async_trait]

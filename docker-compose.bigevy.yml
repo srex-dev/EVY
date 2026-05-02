@@ -1,7 +1,5 @@
 # bigEVY Deployment Configuration
 # Central Processing Node - High-performance server with GPU
-version: '3.8'
-
 services:
   # bigEVY Core Services
   model-manager:

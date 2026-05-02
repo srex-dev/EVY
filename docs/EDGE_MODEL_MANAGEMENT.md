@@ -2,11 +2,12 @@
 
 ## Overview
 
-Edge-optimized model management for EVY lilEVY nodes, designed for Raspberry Pi 4 hardware constraints with 4-bit quantization, memory-aware loading, and power-aware management.
+Edge-optimized model management for EVY lilEVY nodes, designed for Raspberry Pi-class hardware constraints with BitNet/1.58-bit local inference, 4-bit fallback models, memory-aware loading, and power-aware management.
 
 ## Features
 
 - **llama.cpp Integration**: High-performance C++ inference engine
+- **BitNet.cpp Integration**: Preferred local 1-bit/1.58-bit inference path for lilEVY
 - **4-bit Quantization**: Reduces model size by 75% (2GB → 500MB)
 - **Memory-Aware Loading**: Checks available memory before loading
 - **Power-Aware Management**: Unloads models when battery <30%
@@ -28,19 +29,25 @@ EdgeModelManager
 
 Pre-configured edge-optimized models:
 
-1. **tinyllama-4bit**
+1. **bitnet-b1.58-2B-4T**
+   - Size: 1200MB GGUF target
+   - Memory: 1536MB budget before hardware measurement
+   - Context: 4096 tokens in registry; deployment default is 512 tokens
+   - Best for: Preferred local lilEVY reasoning path
+
+2. **tinyllama-4bit**
    - Size: 550MB (quantized)
    - Memory: 600MB when loaded
    - Context: 512 tokens
-   - Best for: General queries
+   - Best for: Development fallback
 
-2. **phi-2-mini-4bit**
+3. **phi-2-mini-4bit**
    - Size: 125MB (quantized)
    - Memory: 200MB when loaded
    - Context: 512 tokens
    - Best for: Low-memory scenarios
 
-3. **qwen1.5-0.5b-4bit**
+4. **qwen1.5-0.5b-4bit**
    - Size: 250MB (quantized)
    - Memory: 350MB when loaded
    - Context: 512 tokens

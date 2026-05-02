@@ -5,7 +5,6 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
-use tracing::debug;
 
 /// Message intent types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -115,20 +114,11 @@ impl IntentClassifier {
     
     /// Classify message intent
     pub fn classify(&self, text: &str) -> ClassificationResult {
-        let text_lower = text.to_lowercase().trim();
+        let normalized = text.to_lowercase();
+        let text_lower = normalized.trim();
         
-        // Check for emergency (highest priority)
-        if self.is_emergency(&text_lower) {
-            return ClassificationResult {
-                intent: Intent::Emergency,
-                priority: MessagePriority::Emergency,
-                requires_rag: false,
-                requires_llm: false,
-                confidence: 0.9,
-            };
-        }
-        
-        // Check for commands
+        // Check for explicit operator commands before keyword matching so
+        // command names like /help are not treated as emergencies.
         if self.command_pattern.is_match(text) {
             return ClassificationResult {
                 intent: Intent::Command,
@@ -136,6 +126,17 @@ impl IntentClassifier {
                 requires_rag: false,
                 requires_llm: false,
                 confidence: 0.95,
+            };
+        }
+
+        // Check for emergency (highest priority for natural-language messages)
+        if self.is_emergency(&text_lower) {
+            return ClassificationResult {
+                intent: Intent::Emergency,
+                priority: MessagePriority::Emergency,
+                requires_rag: false,
+                requires_llm: false,
+                confidence: 0.9,
             };
         }
         

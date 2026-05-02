@@ -4,6 +4,14 @@ This index groups all project documentation in one place.
 
 ## Start Here
 
+- [Minimum Reader Guide](EVY_MINIMUM_READER_GUIDE.md)
+- [Current Codebase Analysis and Gaps](CODEBASE_ANALYSIS_AND_GAPS.md)
+- [Pre-Hardware Backlog](EVY_PRE_HARDWARE_BACKLOG.md)
+- [BitNet Local 1-Bit LLM](BITNET_LOCAL_LLM.md)
+- [LLM And RAG Tuning](LLM_RAG_TUNING.md)
+- [Knowledge Packs And SQLite RAG](KNOWLEDGE_PACKS_AND_SQLITE_RAG.md)
+- [Observability](OBSERVABILITY.md)
+- [Technology Opportunities](TECHNOLOGY_OPPORTUNITIES.md)
 - [Quick Start Guide](QUICK_START_GUIDE.md)
 - [Development Setup](DEVELOPMENT_SETUP.md)
 - [Deployment Runbook](DEPLOYMENT_RUNBOOK.md)
@@ -13,6 +21,10 @@ This index groups all project documentation in one place.
 
 ## Core Plans And Strategy
 
+- [Current Codebase Analysis and Gaps](CODEBASE_ANALYSIS_AND_GAPS.md)
+- [Pre-Hardware Backlog](EVY_PRE_HARDWARE_BACKLOG.md)
+- [BitNet Local 1-Bit LLM](BITNET_LOCAL_LLM.md)
+- [Technology Opportunities](TECHNOLOGY_OPPORTUNITIES.md)
 - [EVY Unified Implementation Plan](EVY_UNIFIED_IMPLEMENTATION_PLAN.md)
 - [EVY Master Implementation Plan](EVY_MASTER_IMPLEMENTATION_PLAN.md)
 - [EVY Enhancements Plan](EVY_ENHANCEMENTS_PLAN.md)
@@ -41,6 +53,8 @@ This index groups all project documentation in one place.
 - [Edge Database](EDGE_DATABASE.md)
 - [SQLite Database Implementation](SQLITE_DATABASE_IMPLEMENTATION.md)
 - [RAG Local Data Integration](RAG_LOCAL_DATA_INTEGRATION.md)
+- [LLM And RAG Tuning](LLM_RAG_TUNING.md)
+- [Knowledge Packs And SQLite RAG](KNOWLEDGE_PACKS_AND_SQLITE_RAG.md)
 - [Offline RAG Implementation Guide](OFFLINE_RAG_IMPLEMENTATION_GUIDE.md)
 - [Offline RAG Priorities](OFFLINE_RAG_PRIORITIES.md)
 - [Knowledge Base Expansion Summary](KNOWLEDGE_BASE_EXPANSION_SUMMARY.md)
@@ -59,6 +73,7 @@ This index groups all project documentation in one place.
 - [Testing Plan](TESTING_PLAN.md)
 - [Software Validation Checklist](SOFTWARE_VALIDATION_CHECKLIST.md)
 - [Hardware Validation Checklist](HARDWARE_VALIDATION_CHECKLIST.md)
+- [Observability](OBSERVABILITY.md)
 - [Edge Load Profile](EDGE_LOAD_PROFILE.md)
 - [SMS Throughput Analysis](SMS_THROUGHPUT_ANALYSIS.md)
 - [SMS Gateway Alternatives](SMS_GATEWAY_ALTERNATIVES.md)

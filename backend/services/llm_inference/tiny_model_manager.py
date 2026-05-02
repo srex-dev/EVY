@@ -56,7 +56,13 @@ class TinyModelManager:
                 "quantized": False
             },
             "bitnet-2b": {
-                "model_id": "bitnet-b1.58-2b-4t",
+                "model_id": "microsoft/bitnet-b1.58-2B-4T",
+                "size": "2B",
+                "memory_requirement": "1200MB",
+                "quantized": True
+            },
+            "bitnet-b1.58-2B-4T": {
+                "model_id": "microsoft/bitnet-b1.58-2B-4T",
                 "size": "2B",
                 "memory_requirement": "1200MB",
                 "quantized": True
@@ -101,8 +107,8 @@ class TinyModelManager:
                 ]
                 logger.info(f"Available Ollama models: {ollama_models}")
                 
-                # Pull tiny models if not available
-                await self._ensure_tiny_models_available()
+                if settings.llm_auto_pull_models:
+                    await self._ensure_tiny_models_available()
             
             # Check local transformers models
             for model_name, config in self.tiny_models.items():

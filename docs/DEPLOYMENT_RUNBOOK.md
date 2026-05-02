@@ -1,434 +1,198 @@
 # EVY Deployment Runbook
-## Step-by-Step Deployment Guide for Edge Hardware
 
-### Document Purpose
-This runbook provides step-by-step instructions for deploying EVY on Raspberry Pi 4 hardware, including hardware setup, software installation, configuration, and validation.
+This runbook describes the deployment paths that are currently supported or intentionally draft. It is written for pre-hardware validation first, then Raspberry Pi hardware bring-up.
 
-**Last Updated**: [Date]
-**Status**: Ready for Implementation
-**Target Hardware**: Raspberry Pi 4 (8GB RAM, ARM64)
+## Current Deployment Status
 
----
+| Path | Status | Use it for |
+| --- | --- | --- |
+| `docker-compose.prehardware.yml` | Verified | Containerized pre-hardware API/SMS/router/privacy flow with deterministic RAG/LLM stubs. |
+| `docker-compose.yml` | Config-verified | Main service topology review; not yet the preferred first smoke path because full model/RAG dependencies are heavier. |
+| `docker-compose.lilevy.yml` | Config-verified | Core Raspberry Pi/lilEVY service profile using real API/SMS/router/LLM/RAG/privacy modules. |
+| `docker-compose.bigevy.yml` | Draft | Central-node design; bigEVY app entrypoint is not implemented. |
+| `docker-compose.enhanced-lilevy.yml` | Experimental | LoRa/mesh design; not ready as a hardware gate. |
+| `docker-compose.hybrid.yml` | Experimental | lilEVY plus bigEVY design; not ready as a hardware gate. |
 
-## 📋 **Prerequisites**
+## Pre-Hardware Container Smoke
 
-### **Hardware Required**
-- Raspberry Pi 4 (8GB RAM)
-- GSM HAT (SIM800C/SIM7000)
-- LoRa HAT (SX1276)
-- 128GB microSD card (Class 10 or better)
-- Solar panel (50-100W)
-- 12V 30Ah Li-ion battery
-- MPPT charge controller
-- DC-DC converter (12V→5V)
-- Cables and mounting hardware
-
-### **Software Required**
-- Raspberry Pi OS 64-bit (Lite)
-- Docker & Docker Compose
-- Rust toolchain (ARM64)
-- Python 3.11
-- Git
-
----
-
-## 🔧 **Hardware Setup**
-
-### **Step 1: Assemble Hardware**
-
-1. **Install GSM HAT**
-   ```bash
-   # Connect GSM HAT to GPIO pins
-   # Ensure proper power supply (3.7V-4.2V, 2A peak)
-   # Connect antenna
-   ```
-
-2. **Install LoRa HAT**
-   ```bash
-   # Connect LoRa HAT to GPIO pins (SPI)
-   # Ensure proper power supply
-   # Connect antenna
-   ```
-
-3. **Connect Solar Power System**
-   ```bash
-   # Connect solar panel to charge controller
-   # Connect battery to charge controller
-   # Connect charge controller to DC-DC converter
-   # Connect DC-DC converter to Raspberry Pi
-   ```
-
-### **Step 2: Install Operating System**
-
-1. **Flash Raspberry Pi OS**
-   ```bash
-   # Download Raspberry Pi OS 64-bit Lite
-   # Use Raspberry Pi Imager to flash to microSD
-   # Enable SSH and configure WiFi (if needed)
-   ```
-
-2. **First Boot**
-   ```bash
-   # Boot Raspberry Pi
-   # Login via SSH
-   # Update system
-   sudo apt update && sudo apt upgrade -y
-   ```
-
----
-
-## 💻 **Software Installation**
-
-### **Step 3: Install Base Software**
+Use this before hardware arrives. It builds a lightweight image, starts the real API gateway, SMS gateway, message router, and privacy filter, then uses deterministic local stubs for RAG and LLM.
 
 ```bash
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-
-# Install Docker Compose
-sudo apt install docker-compose -y
-
-# Install Rust (ARM64)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-rustup target add aarch64-unknown-linux-gnu
-
-# Install Python 3.11
-sudo apt install python3.11 python3.11-venv python3-pip -y
-
-# Install Git
-sudo apt install git -y
+python scripts/pre_hardware_compose_smoke.py
 ```
 
-### **Step 4: Clone Repository**
+If ports `8000` through `8005` are busy, use another base port:
 
 ```bash
-# Clone EVY repository
-git clone https://github.com/srex-dev/EVY.git
-cd EVY
-
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Install Python dependencies
-pip install -r backend/requirements.txt
+python scripts/pre_hardware_compose_smoke.py --base-port 18100
 ```
 
----
+Expected result:
 
-## 🏗️ **Build Rust Components**
+```json
+{
+  "pass": true,
+  "report": "data/lilevy/software_reports/pre_hardware_compose_smoke_report.json"
+}
+```
 
-### **Step 5: Build Rust Services**
+The smoke sends:
+
+- A normal query.
+- A `/status` command.
+- An emergency message.
+
+It verifies that responses appear in SMS history and fit inside SMS-sized chunks.
+
+## Manual Pre-Hardware Stack
+
+Start the verified lightweight stack:
 
 ```bash
-# Navigate to Rust project
-cd backend-rust
-
-# Build SMS Gateway
-cd sms_gateway
-cargo build --release --target aarch64-unknown-linux-gnu
-cd ..
-
-# Build Message Router
-cd message_router
-cargo build --release --target aarch64-unknown-linux-gnu
-cd ..
-
-# Build Compression Engine
-cd compression
-cargo build --release --target aarch64-unknown-linux-gnu
-cd ..
-
-# Build Mesh Network
-cd mesh_network
-cargo build --release --target aarch64-unknown-linux-gnu
-cd ..
-
-# Build PyO3 bindings
-cd pyo3_bindings
-cargo build --release --target aarch64-unknown-linux-gnu
-cd ../..
+docker compose -f docker-compose.prehardware.yml up -d --wait
 ```
 
----
-
-## ⚙️ **Configuration**
-
-### **Step 6: Configure Environment**
+If default ports are busy:
 
 ```bash
-# Copy environment template
-cp env.template .env
-
-# Edit .env file
-nano .env
+EVY_PREHW_API_PORT=18100 \
+EVY_PREHW_SMS_PORT=18101 \
+EVY_PREHW_ROUTER_PORT=18102 \
+EVY_PREHW_LLM_PORT=18103 \
+EVY_PREHW_RAG_PORT=18104 \
+EVY_PREHW_PRIVACY_PORT=18105 \
+docker compose -f docker-compose.prehardware.yml up -d --wait
 ```
 
-**Required Configuration:**
-```bash
-# Node Configuration
-NODE_TYPE=lilevy
-NODE_ID=node-001
-NODE_LOCATION=Wichita,KS
-
-# SMS Configuration
-SMS_DEVICE=/dev/ttyUSB1
-GSM_ENABLED=true
-GSM_BAUD_RATE=9600
-
-# LoRa Configuration
-LORA_ENABLED=true
-LORA_FREQUENCY=433.0
-LORA_POWER=14
-MESH_NETWORK_ENABLED=true
-
-# LLM Configuration
-LLM_MODEL_PATH=/models/tinyllama-4bit.gguf
-LLM_N_CTX=512
-LLM_N_THREADS=2
-
-# Resource Limits
-MAX_MEMORY_MB=7000
-MAX_CPU_PERCENT=80
-BATTERY_THRESHOLD=0.2
-MEMORY_THRESHOLD_MB=100
-
-# Emergency Configuration
-EMERGENCY_ENABLED=true
-EMERGENCY_PRIORITY=true
-```
-
-### **Step 7: Download Models**
+Run the external smoke against that stack:
 
 ```bash
-# Create models directory
-mkdir -p /data/models
-
-# Download TinyLlama (4-bit quantized)
-# Place model file at /data/models/tinyllama-4bit.gguf
-
-# Verify model file
-ls -lh /data/models/tinyllama-4bit.gguf
+python scripts/pre_hardware_smoke.py --external-api-url http://127.0.0.1:18100
 ```
 
----
-
-## 🚀 **Deployment**
-
-### **Step 8: Deploy Services**
+Stop the stack:
 
 ```bash
-# Use deployment script
-./deploy-enhanced-lilevy.sh
-
-# Or manually with Docker Compose
-docker-compose -f docker-compose.enhanced-lilevy.yml up -d
-
-# Check service status
-docker-compose -f docker-compose.enhanced-lilevy.yml ps
-
-# View logs
-docker-compose -f docker-compose.enhanced-lilevy.yml logs -f
+docker compose -f docker-compose.prehardware.yml down --remove-orphans
 ```
 
-### **Step 9: Verify Deployment**
+## Main Compose Config Gate
+
+The main Compose file should at least continue to parse cleanly:
 
 ```bash
-# Check SMS Gateway
-curl http://localhost:8000/health/sms-gateway
-
-# Check Message Router
-curl http://localhost:8000/health/message-router
-
-# Check LLM Service
-curl http://localhost:8000/health/llm-service
-
-# Check all services
-curl http://localhost:8000/health
+docker compose config --quiet
 ```
 
----
+This checks YAML shape and service URL wiring. It does not prove that every heavy dependency, model, or hardware path is ready.
 
-## ✅ **Validation**
+## Core lilEVY Config Gate
 
-### **Step 10: Hardware Validation**
+The core lilEVY profile now uses real service entrypoints:
 
 ```bash
-# Test GSM HAT
-python3 scripts/test_gsm.py
-
-# Test LoRa HAT
-python3 scripts/test_lora.py
-
-# Test power system
-python3 scripts/test_power.py
-
-# Measure power consumption
-python3 scripts/measure_power.py
+docker compose -f docker-compose.lilevy.yml config --quiet
 ```
 
-### **Step 11: Functional Testing**
+Default host ports are intentionally high to reduce collisions on development machines:
+
+| Service | Container port | Default host port |
+| --- | --- | --- |
+| API gateway | `8080` | `18080` |
+| SMS gateway | `8000` | `18000` |
+| Message router | `8001` | `18001` |
+| Tiny LLM | `8002` | `18002` |
+| Local RAG | `8003` | `18003` |
+| Privacy filter | `8004` | `18004` |
+
+Hardware device mounts are intentionally not in the base file. Add a local override after the exact modem, GPS, LoRa, and GPIO paths are confirmed.
+
+On Linux/Raspberry Pi hardware, the current helper script wraps this profile:
 
 ```bash
-# Run unit tests
-pytest backend/tests/ -v
-
-# Run integration tests
-pytest backend/tests/test_integration.py -v
-
-# Run hardware tests
-pytest tests/hardware/ -v
-
-# Run full test suite
-pytest backend/tests/ tests/ -v --cov=backend
+./deploy-lilevy.sh
 ```
 
-### **Step 12: Performance Testing**
+The script writes `.env.lilevy`, builds the core services, starts them, and checks the configured health endpoints. It also includes a local `docker-compose.override.yml` only when that file exists, so a clean checkout does not depend on an untracked override.
+
+## Local BitNet LLM Setup
+
+lilEVY now targets BitNet b1.58 2B4T through `bitnet.cpp` for local inference.
+
+Prepare the runtime and model on Linux/Raspberry Pi:
 
 ```bash
-# Test SMS processing
-python3 scripts/test_sms_performance.py
-
-# Test response time
-python3 scripts/test_response_time.py
-
-# Test resource usage
-python3 scripts/test_resource_usage.py
+bash scripts/setup_bitnet_cpp.sh
 ```
 
----
-
-## 🔍 **Troubleshooting**
-
-### **Common Issues**
-
-#### **GSM HAT Not Detected**
-```bash
-# Check device
-ls -l /dev/ttyUSB*
-
-# Check permissions
-sudo chmod 666 /dev/ttyUSB1
-
-# Test connection
-gammu identify
-```
-
-#### **LoRa HAT Not Working**
-```bash
-# Check SPI
-lsmod | grep spi
-
-# Enable SPI
-sudo raspi-config
-# Interface Options → SPI → Enable
-
-# Reboot
-sudo reboot
-```
-
-#### **High Memory Usage**
-```bash
-# Check memory
-free -h
-
-# Check processes
-ps aux --sort=-%mem | head
-
-# Restart services
-docker-compose restart
-```
-
-#### **High Power Consumption**
-```bash
-# Check CPU frequency
-cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
-
-# Reduce CPU frequency
-sudo cpufreq-set -g powersave
-
-# Check power
-python3 scripts/measure_power.py
-```
-
----
-
-## 📊 **Monitoring**
-
-### **Step 13: Setup Monitoring**
+Then run:
 
 ```bash
-# Start Prometheus
-docker-compose -f docker-compose.enhanced-lilevy.yml up -d prometheus
-
-# Start Grafana
-docker-compose -f docker-compose.enhanced-lilevy.yml up -d grafana
-
-# Access dashboards
-# Prometheus: http://localhost:9090
-# Grafana: http://localhost:3000
+docker compose --env-file .env.bitnet -f docker-compose.lilevy.yml up -d --build
 ```
 
----
+The LLM health endpoint should report `details.bitnet.available = true`. See [BitNet Local 1-Bit LLM](BITNET_LOCAL_LLM.md) for model paths and validation notes.
 
-## 🔄 **Maintenance**
-
-### **Daily Tasks**
-- Check service health
-- Review logs for errors
-- Monitor resource usage
-- Check battery level
-
-### **Weekly Tasks**
-- Update knowledge base
-- Review performance metrics
-- Check disk space
-- Backup database
-
-### **Monthly Tasks**
-- Update models (if available)
-- Security updates
-- Hardware inspection
-- Performance optimization
-
----
-
-**END OF DEPLOYMENT RUNBOOK**
-
----
-
-*This runbook provides step-by-step deployment instructions. Follow in order for successful deployment.*
-
-## Addendum: Pi Bring-up Acceptance Checks
-
-Use these checks after each cold boot to validate hardware + offline mode:
+Capture a local readiness report:
 
 ```bash
-# Service health chain
-curl -f http://localhost:8000/health
-curl -f http://localhost:8001/health
-curl -f http://localhost:8002/health
-curl -f http://localhost:8003/health
-
-# Device presence
-ls -l /dev/ttyUSB0 /dev/ttyUSB1 /dev/spidev0.0
-
-# SPI enabled
-grep -E "^dtparam=spi=on" /boot/config.txt || echo "SPI not enabled"
+python scripts/validate_bitnet_local_llm.py --run-inference --health-url http://127.0.0.1:18002/health
 ```
 
-## Addendum: Operator SMS Status
+Then capture the SMS prompt benchmark:
 
-The router supports a lightweight operator status command over SMS:
+```bash
+python scripts/benchmark_bitnet_sms_prompts.py
+```
 
-- Send `!status` or `/status`
-- Response includes processed message count, RAG usage, and battery value (if telemetry file is present)
+## First Hardware Bring-Up Order
 
-Power telemetry source (optional):
+Do not start with the full system. Bring hardware up in this order:
 
-- `/data/telemetry/power.json`
-- Example payload: `{"battery_level": 78.2}`
+1. Boot Raspberry Pi and confirm OS, Python, Docker, UART, SPI, and GPIO access.
+2. Confirm device paths: GSM `/dev/ttyUSB*`, GPS `/dev/ttyAMA0`, LoRa `/dev/spidev0.0`.
+3. Run GSM hardware validation.
+4. Send one outbound SMS.
+5. Receive one inbound SMS.
+6. Run LoRa SPI/GPIO validation.
+7. Run GPS validation if GPS is installed.
+8. Run power telemetry validation.
+9. Run the integrated SMS flow with the real modem.
 
+Hardware validation scripts:
+
+```bash
+python scripts/test_gsm_hardware.py --device /dev/ttyUSB0
+python scripts/test_lora_hardware.py --spi-bus 0 --spi-device 0 --frequency 915.0
+python scripts/test_gps_hardware.py --device /dev/ttyAMA0
+python scripts/test_power_hardware.py --telemetry-file /data/telemetry/power.json
+python scripts/test_edge_hardware_suite.py
+```
+
+## Operator Status Command
+
+The router supports:
+
+- `/status`
+- `!status`
+
+The response includes processed message count, RAG usage, and battery value if a telemetry file exists.
+
+Optional power telemetry file:
+
+```json
+{"battery_level": 78.2}
+```
+
+Default path:
+
+```text
+/data/telemetry/power.json
+```
+
+## Known Deployment Gaps
+
+- bigEVY Dockerfile still references a missing app entrypoint.
+- Enhanced lilEVY/mesh deployment is not ready for first hardware validation.
+- The full RAG/LLM runtime path still needs a decision: deterministic stubs, local Ollama, or a preloaded tiny model.
+- Secrets, operator authentication, and public-phone policies are not production-ready.

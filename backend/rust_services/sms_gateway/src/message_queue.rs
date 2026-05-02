@@ -4,14 +4,13 @@
 
 use crate::error::{GatewayError, Result};
 use chrono::{DateTime, Utc};
-use smallvec::SmallVec;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Message priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MessagePriority {
     Low = 0,
     Normal = 1,

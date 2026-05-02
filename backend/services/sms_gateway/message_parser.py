@@ -99,6 +99,10 @@ class MessageParser:
         
         # URL patterns
         self.url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+
+        # Open Location Code / Plus Code token pattern. EVY preserves the
+        # code as metadata so routing and RAG can use the sender's location.
+        self.plus_code_pattern = r'\b[23456789cfghjmpqrvwx]{2,8}\+[23456789cfghjmpqrvwx]{2,3}\b'
         
         # Profanity filter (basic)
         self.profanity_words = [
@@ -253,6 +257,19 @@ class MessageParser:
         # Extract URLs
         url_matches = re.findall(self.url_pattern, text)
         entities['urls'].extend(url_matches)
+
+        # Extract Plus Codes before generic number extraction so the location
+        # token survives as normalized metadata.
+        plus_code_matches = re.findall(self.plus_code_pattern, text, flags=re.IGNORECASE)
+        if plus_code_matches:
+            normalized_plus_codes = [match.upper() for match in plus_code_matches]
+            entities['plus_codes'] = normalized_plus_codes
+            entities['location'] = {
+                'plus_code': normalized_plus_codes[0],
+                'normalized': normalized_plus_codes[0],
+                'source': 'sms_plus_code',
+            }
+            entities['locations'].extend(normalized_plus_codes)
         
         # Extract numbers
         number_matches = re.findall(r'\b\d+\b', text)

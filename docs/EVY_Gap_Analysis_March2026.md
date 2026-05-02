@@ -4,6 +4,8 @@
 
 ---
 
+> Current note: this historical analysis has been partially superseded by `CODEBASE_ANALYSIS_AND_GAPS.md`, `BITNET_LOCAL_LLM.md`, and the updated Compose/deploy files. Keep it as background, not as the current source of truth.
+
 ## 1. Executive Summary
 
 EVY is a well-conceived project with a clear mission: democratize AI access via SMS over off-grid mesh infrastructure. After a full read of every service, configuration, and documentation file in the repository, the picture is one of strong conceptual design and significant documentation investment, sitting on top of a backend that is roughly 50–60% implemented. The architecture is sound. The gaps are real and fixable. The arrival of 1-bit inferencing (BitNet b1.58 2B4T) changes the calculus of what lilEVY can do autonomously, and should drive a meaningful pivot in Phase 3.
@@ -33,7 +35,7 @@ The Docker Compose setup is well-structured. lilEVY gets its own compose file wi
 ### 2.2 Deployment Scripts
 
 - No Pi-specific build target. Scripts run `docker-compose build` with no cross-compilation or ARM-specific step.
-- `deploy-lilevy.sh` sets `DEFAULT_MODEL=tinyllama` but takes no action to pull or validate a model before starting services.
+- `deploy-lilevy.sh` now sets `DEFAULT_MODEL=bitnet-b1.58-2B-4T`; BitNet runtime/model validation remains a hardware bring-up task.
 - No rollback mechanism. If a deployment fails partway through, persistent volumes may contain corrupt state.
 
 ### 2.3 Monitoring
