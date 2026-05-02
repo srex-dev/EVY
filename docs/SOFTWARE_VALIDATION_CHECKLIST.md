@@ -31,6 +31,7 @@ python scripts/test_software_suite.py --stage premerge
 - [ ] `backend/tests/test_knowledge_pack.py` passes
 - [ ] `backend/tests/test_knowledge_pack_script.py` passes
 - [ ] `backend/tests/test_hardware_suite_report.py` passes
+- [ ] `backend/tests/test_gsm_sms_hardware_script.py` passes
 - [ ] `backend/tests/test_sqlite_rag_store.py` passes
 - [ ] `backend/tests/test_observability_and_boot.py` passes
 - [ ] `backend/tests/test_observability_profile.py` passes
@@ -110,6 +111,7 @@ python scripts/test_software_suite.py --stage resilience
 - [ ] Plus Code parser metadata test passes
 - [ ] Boot self-check report scaffold test passes
 - [ ] Hardware validation report artifact shape test passes
+- [ ] GSM SMS hardware helper command/parsing tests pass
 - [ ] OpenTelemetry Collector profile test passes
 - [ ] Raspberry Pi bootstrap check report shape test passes
 - [ ] `/status` is operator-restricted unless a simulation explicitly enables public status
@@ -122,7 +124,7 @@ python scripts/pre_hardware_smoke.py
 python scripts/pre_hardware_compose_smoke.py --base-port 18100
 python -m pytest backend/tests -q
 python -m pytest backend/tests/test_bitnet_cpp_manager.py backend/tests/test_bitnet_validation_script.py backend/tests/test_bitnet_sms_benchmark.py backend/tests/test_llm_inference.py -q
-python -m pytest backend/tests/test_hardware_suite_report.py backend/tests/test_knowledge_pack.py backend/tests/test_knowledge_pack_script.py backend/tests/test_llm_rag_tuning_script.py backend/tests/test_sqlite_rag_store.py backend/tests/test_observability_and_boot.py backend/tests/test_observability_profile.py backend/tests/test_pi_bootstrap_check.py backend/tests/test_sms_gateway.py -q
+python -m pytest backend/tests/test_gsm_sms_hardware_script.py backend/tests/test_hardware_suite_report.py backend/tests/test_knowledge_pack.py backend/tests/test_knowledge_pack_script.py backend/tests/test_llm_rag_tuning_script.py backend/tests/test_sqlite_rag_store.py backend/tests/test_observability_and_boot.py backend/tests/test_observability_profile.py backend/tests/test_pi_bootstrap_check.py backend/tests/test_sms_gateway.py -q
 python scripts/validate_knowledge_pack.py --require-signature --import-sqlite --search "boil water"
 python scripts/tune_llm_rag_prompts.py --llm-url http://127.0.0.1:1
 python scripts/pi_bootstrap_check.py

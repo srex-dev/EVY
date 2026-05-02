@@ -35,6 +35,7 @@ def build_stage_commands(stage: str) -> List[Dict[str, List[str]]]:
         "regression": [
             {"name": "bitnet_sms_benchmark_tests", "cmd": pytest + ["backend/tests/test_bitnet_sms_benchmark.py", "-q"]},
             {"name": "bitnet_validation_script_tests", "cmd": pytest + ["backend/tests/test_bitnet_validation_script.py", "-q"]},
+            {"name": "gsm_sms_hardware_script_tests", "cmd": pytest + ["backend/tests/test_gsm_sms_hardware_script.py", "-q"]},
             {"name": "hardware_suite_report_tests", "cmd": pytest + ["backend/tests/test_hardware_suite_report.py", "-q"]},
             {"name": "knowledge_pack_tests", "cmd": pytest + ["backend/tests/test_knowledge_pack.py", "-q"]},
             {"name": "knowledge_pack_script_tests", "cmd": pytest + ["backend/tests/test_knowledge_pack_script.py", "-q"]},
@@ -81,6 +82,7 @@ def evaluate_release_gates(results: List[Dict]) -> Dict:
     required = [
         "bitnet_sms_benchmark_tests",
         "bitnet_validation_script_tests",
+        "gsm_sms_hardware_script_tests",
         "hardware_suite_report_tests",
         "knowledge_pack_tests",
         "knowledge_pack_script_tests",

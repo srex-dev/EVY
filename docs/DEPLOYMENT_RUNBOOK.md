@@ -165,6 +165,8 @@ Hardware validation scripts:
 
 ```bash
 python scripts/test_gsm_hardware.py --device /dev/ttyUSB0
+python scripts/test_gsm_sms_hardware.py --device /dev/ttyUSB0 --send-to "+15551234567" --message "EVY outbound GSM test"
+python scripts/test_gsm_sms_hardware.py --device /dev/ttyUSB0 --wait-inbound --expect-from "+15551234567" --expect-text "water is unsafe"
 python scripts/test_lora_hardware.py --spi-bus 0 --spi-device 0 --frequency 915.0
 python scripts/test_gps_hardware.py --device /dev/ttyAMA0
 python scripts/test_power_hardware.py --telemetry-file /data/telemetry/power.json

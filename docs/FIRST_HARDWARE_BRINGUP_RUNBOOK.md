@@ -237,7 +237,14 @@ Do not proceed to integrated SMS until this report is understandable.
 
 ## Phase 8: One Outbound SMS
 
-Use the hardware script or gateway path only after `AT` checks pass.
+Use the direct SMS hardware script only after `AT` checks pass:
+
+```bash
+python3 scripts/test_gsm_sms_hardware.py \
+  --device /dev/ttyUSB0 \
+  --send-to "+15551234567" \
+  --message "EVY outbound GSM test"
+```
 
 Record:
 
@@ -253,6 +260,22 @@ Send this exact first inbound test from the known phone:
 
 ```text
 EVY test: what should I do if water is unsafe?
+```
+
+Then poll for it:
+
+```bash
+python3 scripts/test_gsm_sms_hardware.py \
+  --device /dev/ttyUSB0 \
+  --wait-inbound \
+  --expect-from "+15551234567" \
+  --expect-text "water is unsafe"
+```
+
+The default report is:
+
+```text
+data/lilevy/software_reports/gsm_sms_report.json
 ```
 
 Record:
