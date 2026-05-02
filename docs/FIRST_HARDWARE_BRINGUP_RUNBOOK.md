@@ -141,6 +141,13 @@ Create writable paths:
 mkdir -p data/lilevy/software_reports logs models
 ```
 
+Set the operator phone allowlist before exposing a real SIM. Use the phone number that should be allowed to request node status:
+
+```bash
+export OPERATOR_PHONE_ALLOWLIST="+15551234567"
+export PUBLIC_STATUS_ENABLED=false
+```
+
 Run the Pi bootstrap check:
 
 ```bash
@@ -258,6 +265,7 @@ Record:
 ## Phase 10: Integrated SMS Response
 
 Start the core lilEVY profile with real GSM configuration and local BitNet/RAG.
+Keep `OPERATOR_PHONE_ALLOWLIST` set for the operator phone. Leave `PUBLIC_STATUS_ENABLED=false` unless this is a closed bench simulation.
 
 Send:
 

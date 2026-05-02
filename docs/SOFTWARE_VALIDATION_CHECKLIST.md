@@ -112,6 +112,7 @@ python scripts/test_software_suite.py --stage resilience
 - [ ] Hardware validation report artifact shape test passes
 - [ ] OpenTelemetry Collector profile test passes
 - [ ] Raspberry Pi bootstrap check report shape test passes
+- [ ] `/status` is operator-restricted unless a simulation explicitly enables public status
 
 Recommended full run:
 

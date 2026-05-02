@@ -183,6 +183,13 @@ Raspberry Pi bootstrap readiness report:
 python scripts/pi_bootstrap_check.py --require-docker
 ```
 
+Before using a real SIM, restrict status commands to the operator phone:
+
+```bash
+OPERATOR_PHONE_ALLOWLIST="+15551234567"
+PUBLIC_STATUS_ENABLED=false
+```
+
 Sample knowledge-pack validation and SQLite RAG import:
 
 ```bash

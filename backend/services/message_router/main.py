@@ -20,6 +20,30 @@ from backend.shared.logging import setup_logger
 logger = setup_logger("message-router")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_phone_number(value: str) -> str:
+    stripped = value.strip()
+    if stripped == "*":
+        return "*"
+    prefix = "+" if stripped.startswith("+") else ""
+    digits = re.sub(r"\D", "", stripped)
+    return f"{prefix}{digits}" if digits else stripped
+
+
+def _parse_allowlist(value: str) -> set[str]:
+    return {
+        normalized
+        for raw in value.split(",")
+        if (normalized := _normalize_phone_number(raw))
+    }
+
+
 class MessageRouter:
     """Routes messages to appropriate processing services."""
     
@@ -28,6 +52,10 @@ class MessageRouter:
         self.rag_service_url = os.getenv("RAG_SERVICE_URL", settings.rag_service_url)
         self.privacy_service_url = os.getenv("PRIVACY_FILTER_URL", settings.privacy_filter_url)
         self.sms_gateway_url = os.getenv("SMS_GATEWAY_URL", settings.sms_gateway_url)
+        self.operator_phone_allowlist = _parse_allowlist(
+            os.getenv("OPERATOR_PHONE_ALLOWLIST", settings.operator_phone_allowlist)
+        )
+        self.public_status_enabled = _env_bool("PUBLIC_STATUS_ENABLED", settings.public_status_enabled)
         
         # Processing statistics
         self.stats = {
@@ -40,7 +68,8 @@ class MessageRouter:
             "rag_queries": 0,
             "llm_queries": 0,
             "llm_timeouts": 0,
-            "overload_rejections": 0
+            "overload_rejections": 0,
+            "unauthorized_commands": 0
         }
         self.llm_semaphore = asyncio.Semaphore(settings.llm_max_inflight_requests)
         
@@ -352,8 +381,11 @@ class MessageRouter:
         
         # Parse command
         if command.startswith("/help"):
-            return "Available commands: /help, /status, /weather, /news. More coming soon!"
+            return "Commands: /help, /status (operator), /weather, /news. Ask questions normally for local help."
         elif command.startswith("/status") or command.startswith("!status"):
+            if not self._status_authorized(message):
+                self.stats["unauthorized_commands"] += 1
+                return "Status command restricted. Ask an EVY operator for node health."
             battery = "n/a"
             telemetry_path = os.getenv("POWER_TELEMETRY_FILE", "/data/telemetry/power.json")
             try:
@@ -371,6 +403,14 @@ class MessageRouter:
             return "News service not yet available. Try asking 'What's the latest news?' instead."
         else:
             return self.response_templates["command"]
+
+    def _status_authorized(self, message: SMSMessage) -> bool:
+        """Return true when the sender may view node status."""
+        if self.public_status_enabled:
+            return True
+        if "*" in self.operator_phone_allowlist:
+            return True
+        return _normalize_phone_number(message.sender) in self.operator_phone_allowlist
     
     async def _handle_template(self, message: SMSMessage, processed: ProcessedMessage) -> str:
         """Handle template messages like greetings."""
@@ -392,7 +432,11 @@ class MessageRouter:
         return {
             **self.stats,
             "uptime": "Service running",
-            "last_updated": datetime.utcnow().isoformat()
+            "last_updated": datetime.utcnow().isoformat(),
+            "operator_policy": {
+                "public_status_enabled": self.public_status_enabled,
+                "operator_allowlist_configured": bool(self.operator_phone_allowlist),
+            }
         }
 
 

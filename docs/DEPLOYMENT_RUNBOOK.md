@@ -178,7 +178,14 @@ The router supports:
 - `/status`
 - `!status`
 
-The response includes processed message count, RAG usage, and battery value if a telemetry file exists.
+The response includes processed message count, RAG usage, and battery value if a telemetry file exists. On real SIM deployments, status is restricted unless the sender is in `OPERATOR_PHONE_ALLOWLIST` or `PUBLIC_STATUS_ENABLED=true` is explicitly set for a closed simulation.
+
+Example:
+
+```bash
+OPERATOR_PHONE_ALLOWLIST="+15551234567"
+PUBLIC_STATUS_ENABLED=false
+```
 
 Optional power telemetry file:
 

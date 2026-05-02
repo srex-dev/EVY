@@ -39,6 +39,7 @@ async def test_route_to_rag_filters_low_scores():
 @pytest.mark.asyncio
 async def test_status_command_response_is_sms_sized():
     router = MessageRouter()
+    router.operator_phone_allowlist = {"+1"}
     sms = SMSMessage(sender="+1", receiver="+2", content="!status")
     processed = ProcessedMessage(
         original_message=sms,
@@ -48,6 +49,42 @@ async def test_status_command_response_is_sms_sized():
     )
     response = await router._handle_command(sms, processed)
     assert len(response) <= 160
+    assert "Status OK" in response
+
+
+@pytest.mark.asyncio
+async def test_status_command_is_restricted_without_operator_policy():
+    router = MessageRouter()
+    router.operator_phone_allowlist = set()
+    router.public_status_enabled = False
+    sms = SMSMessage(sender="+15551230002", receiver="+2", content="/status")
+    processed = ProcessedMessage(
+        original_message=sms,
+        message_type=MessageType.COMMAND,
+        priority=MessagePriority.HIGH,
+        requires_llm=False,
+    )
+
+    response = await router._handle_command(sms, processed)
+
+    assert "restricted" in response.lower()
+    assert router.stats["unauthorized_commands"] == 1
+
+
+@pytest.mark.asyncio
+async def test_status_command_can_be_public_for_simulation():
+    router = MessageRouter()
+    router.public_status_enabled = True
+    sms = SMSMessage(sender="+15551230002", receiver="+2", content="/status")
+    processed = ProcessedMessage(
+        original_message=sms,
+        message_type=MessageType.COMMAND,
+        priority=MessagePriority.HIGH,
+        requires_llm=False,
+    )
+
+    response = await router._handle_command(sms, processed)
+
     assert "Status OK" in response
 
 

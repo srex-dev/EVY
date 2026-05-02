@@ -80,6 +80,7 @@ services:
       - RAG_SERVICE_URL=http://stub-rag:8004
       - SMS_GATEWAY_URL=http://sms-gateway:8001
       - PRIVACY_FILTER_URL=http://privacy-filter:8005
+      - PUBLIC_STATUS_ENABLED=true
     ports:
       - "${EVY_PREHW_ROUTER_PORT:-8002}:8002"
     depends_on:

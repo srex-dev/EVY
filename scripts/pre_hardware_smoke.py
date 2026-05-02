@@ -115,6 +115,7 @@ def build_services(base_port: int) -> list[ServiceProcess]:
                 "RAG_SERVICE_URL": common_urls["RAG_SERVICE_URL"],
                 "SMS_GATEWAY_URL": common_urls["SMS_GATEWAY_URL"],
                 "PRIVACY_FILTER_URL": common_urls["PRIVACY_FILTER_URL"],
+                "PUBLIC_STATUS_ENABLED": "true",
             },
         ),
         ServiceProcess(

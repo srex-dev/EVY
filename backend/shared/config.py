@@ -99,6 +99,8 @@ class Settings(BaseSettings):
     llm_max_loaded_models: int = 2
     rag_chunk_size_chars: int = 600
     rag_chunk_overlap_chars: int = 120
+    operator_phone_allowlist: str = ""
+    public_status_enabled: bool = False
     
     # Monitoring
     prometheus_port: int = 9090
