@@ -30,6 +30,7 @@ This README reflects the current codebase state after a fresh review. It separat
 - [Observability](docs/OBSERVABILITY.md): metric names and optional local OpenTelemetry Collector profile.
 - [Technology Opportunities](docs/TECHNOLOGY_OPPORTUNITIES.md): decision matrix for additional tech worth considering.
 - [Pre-Hardware Backlog](docs/EVY_PRE_HARDWARE_BACKLOG.md): phased work items to complete before and during hardware arrival.
+- [First Hardware Purchase BOM](docs/HARDWARE_PURCHASE_BOM.md): what to buy now, what to swap, and what to hold until after GSM/BitNet stability.
 - [Deployment Runbook](docs/DEPLOYMENT_RUNBOOK.md): verified pre-hardware container path and hardware bring-up order.
 - [First Hardware Bring-Up Runbook](docs/FIRST_HARDWARE_BRINGUP_RUNBOOK.md): exact first Pi/GSM/BitNet bench procedure.
 - [Hardware Validation Checklist](docs/HARDWARE_VALIDATION_CHECKLIST.md): target validation order once hardware is available.
@@ -217,7 +218,7 @@ These are the highest-impact gaps before hardware testing:
 - Fix enhanced lilEVY orchestration mismatches before treating mesh mode as runnable.
 - Add real LoRa receive/IRQ handling, packet tests, and checksum validation.
 - Decide whether the first hardware test is GSM-only, GSM plus local RAG/LLM, or full GSM plus LoRa.
-- Add a hardware bring-up runbook with exact device paths, expected AT responses, LoRa frequency, GPIO pins, and pass/fail evidence.
+- Fill in purchased-device details in the hardware bring-up runbook: exact modem paths, expected AT responses, LoRa frequency, GPIO pins, and pass/fail evidence.
 - Harden secrets, API access, operator commands, phone-number policies, logging, and emergency escalation before any public or field exposure.
 - Decide whether to take the breaking Vite/esbuild upgrade called out by `npm audit` or document the dev-server-only risk for the pre-hardware branch.
 
@@ -278,6 +279,8 @@ EVY/
 ```
 
 ## Target Hardware
+
+See [First Hardware Purchase BOM](docs/HARDWARE_PURCHASE_BOM.md) for the current buy/hold/swap list for the first bench node.
 
 The target lilEVY node is currently:
 

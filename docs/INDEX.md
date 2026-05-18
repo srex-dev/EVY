@@ -12,6 +12,7 @@ This index groups all project documentation in one place.
 - [Knowledge Packs And SQLite RAG](KNOWLEDGE_PACKS_AND_SQLITE_RAG.md)
 - [Observability](OBSERVABILITY.md)
 - [Technology Opportunities](TECHNOLOGY_OPPORTUNITIES.md)
+- [First Hardware Purchase BOM](HARDWARE_PURCHASE_BOM.md)
 - [Quick Start Guide](QUICK_START_GUIDE.md)
 - [Development Setup](DEVELOPMENT_SETUP.md)
 - [Deployment Runbook](DEPLOYMENT_RUNBOOK.md)
@@ -74,6 +75,7 @@ This index groups all project documentation in one place.
 - [Testing Plan](TESTING_PLAN.md)
 - [Software Validation Checklist](SOFTWARE_VALIDATION_CHECKLIST.md)
 - [Hardware Validation Checklist](HARDWARE_VALIDATION_CHECKLIST.md)
+- [First Hardware Purchase BOM](HARDWARE_PURCHASE_BOM.md)
 - [Observability](OBSERVABILITY.md)
 - [Edge Load Profile](EDGE_LOAD_PROFILE.md)
 - [SMS Throughput Analysis](SMS_THROUGHPUT_ANALYSIS.md)
@@ -84,6 +86,7 @@ This index groups all project documentation in one place.
 
 - [Deployment Summary](DEPLOYMENT_SUMMARY.md)
 - [First Hardware Bring-Up Runbook](FIRST_HARDWARE_BRINGUP_RUNBOOK.md)
+- [First Hardware Purchase BOM](HARDWARE_PURCHASE_BOM.md)
 - [Pre Deployment Checklist](PRE_DEPLOYMENT_CHECKLIST.md)
 - [Implementation Progress Summary](IMPLEMENTATION_PROGRESS_SUMMARY.md)
 - [Implementation Timeline Review](IMPLEMENTATION_TIMELINE_REVIEW.md)
